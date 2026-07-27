@@ -1,9 +1,21 @@
+import groovy.xml.XmlSlurper
+
 plugins {
     id 'java'
     id 'org.springframework.boot' version '4.0.5' apply false
     id 'io.spring.dependency-management' version '1.1.7' apply false
     id 'org.jreleaser' version '1.24.0'
 }
+
+def publishedModuleDescriptions = [
+    'token-pilot-core': 'Framework-independent LLM usage normalization, pricing, cost calculation, and ledger contracts.',
+    'token-pilot-spring-ai': 'Optional Spring AI adapter for recording provider-reported LLM usage through Token Pilot.',
+    'token-pilot-micrometer': 'Optional Micrometer publisher for Token Pilot cost and usage accounting events.',
+    'token-pilot-budget': 'Budget policy evaluation and in-memory budget state components for Token Pilot.',
+    'token-pilot-notification': 'Budget notification events, handlers, and deduplication components for Token Pilot.',
+    'token-pilot-autoconfigure': 'Spring Boot auto-configuration for Token Pilot core and optional adapters.',
+    'token-pilot-starter': 'Spring AI convenience starter that assembles Token Pilot runtime modules.'
+]
 
 allprojects {
     group = 'cloud.token-pilot'
@@ -36,8 +48,9 @@ jreleaser {
     project {
         copyright = '2026 Token Pilot'
         authors = ['Token Pilot']
-        description = 'Token Pilot modules for Spring AI token usage tracking, cost calculation, metrics, and budget enforcement.'
+        description = 'Framework-independent Java LLM usage control and accounting core with optional adapters.'
         inceptionYear = '2026'
+        license = 'MIT'
         links {
             homepage = 'https://github.com/tokenpliot/tokenpilot'
         }
@@ -139,6 +152,11 @@ subprojects {
     }
 
     if (name != 'token-pilot-sample-app') {
+        description = publishedModuleDescriptions[name]
+        if (!description) {
+            throw new GradleException("Missing publication description for ${project.path}")
+        }
+
         apply plugin: 'maven-publish'
         apply plugin: 'signing'
 
@@ -164,26 +182,26 @@ subprojects {
 
                     pom {
                         name = project.name
-                        description = 'Token Pilot modules for Spring AI token usage tracking, cost calculation, metrics, and budget enforcement.'
+                        description = publishedModuleDescriptions[project.name]
                         url = 'https://github.com/tokenpliot/tokenpilot'
                         inceptionYear = '2026'
 
                         organization {
                             name = 'Token Pilot'
-                            url = 'https://github.com/tokenpliot/tokenpilot'
+                            url = 'https://github.com/tokenpliot'
                         }
 
                         licenses {
                             license {
-                                name = 'Apache License 2.0'
-                                url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+                                name = 'MIT License'
+                                url = 'https://opensource.org/license/mit'
                                 distribution = 'repo'
                             }
                         }
 
                         developers {
                             developer {
-                                id = 'token-pilot'
+                                id = 'tokenpliot'
                                 name = 'Token Pilot'
                                 url = 'https://github.com/tokenpliot'
                             }
@@ -252,4 +270,78 @@ subprojects {
             sign publishing.publications.mavenJava
         }
     }
+}
+
+def publicationPomTasks = publishedModuleDescriptions.keySet().collect {
+    ":${it}:generatePomFileForMavenJavaPublication"
+}
+
+tasks.register('verifyPublicationMetadata') {
+    group = 'verification'
+    description = 'Verifies generated Maven POM metadata for every published Token Pilot module.'
+    dependsOn publicationPomTasks
+    inputs.file(layout.projectDirectory.file('LICENSE'))
+
+    doLast {
+        def expectedPublishedModules = publishedModuleDescriptions.keySet() as Set
+        def actualPublishedModules = subprojects
+            .findAll { it.plugins.hasPlugin('maven-publish') }
+            .collect { it.name } as Set
+
+        if (actualPublishedModules != expectedPublishedModules) {
+            throw new GradleException(
+                "Published modules differ from the expected set. Expected ${expectedPublishedModules}, actual ${actualPublishedModules}"
+            )
+        }
+
+        if (file('LICENSE').readLines('UTF-8').first().trim() != 'MIT License') {
+            throw new GradleException('Root LICENSE must use the MIT License.')
+        }
+
+        def requirePomValue = { String moduleName, String field, String actual, String expected ->
+            if (actual != expected) {
+                throw new GradleException(
+                    "${moduleName} POM ${field} must be '${expected}', but was '${actual}'."
+                )
+            }
+        }
+
+        publishedModuleDescriptions.each { moduleName, moduleDescription ->
+            def moduleProject = project(":${moduleName}")
+            def pomFile = moduleProject.layout.buildDirectory
+                .file('publications/mavenJava/pom-default.xml')
+                .get()
+                .asFile
+            def pom = new XmlSlurper(false, false).parse(pomFile)
+
+            requirePomValue(moduleName, 'name', pom.name.text(), moduleName)
+            requirePomValue(moduleName, 'description', pom.description.text(), moduleDescription)
+            requirePomValue(moduleName, 'url', pom.url.text(), 'https://github.com/tokenpliot/tokenpilot')
+            requirePomValue(moduleName, 'license name', pom.licenses.license.name.text(), 'MIT License')
+            requirePomValue(moduleName, 'license URL', pom.licenses.license.url.text(), 'https://opensource.org/license/mit')
+            requirePomValue(moduleName, 'license distribution', pom.licenses.license.distribution.text(), 'repo')
+            requirePomValue(moduleName, 'organization name', pom.organization.name.text(), 'Token Pilot')
+            requirePomValue(moduleName, 'organization URL', pom.organization.url.text(), 'https://github.com/tokenpliot')
+            requirePomValue(moduleName, 'developer id', pom.developers.developer.id.text(), 'tokenpliot')
+            requirePomValue(moduleName, 'developer name', pom.developers.developer.name.text(), 'Token Pilot')
+            requirePomValue(moduleName, 'developer URL', pom.developers.developer.url.text(), 'https://github.com/tokenpliot')
+            requirePomValue(
+                moduleName,
+                'SCM connection',
+                pom.scm.connection.text(),
+                'scm:git:https://github.com/tokenpliot/tokenpilot.git'
+            )
+            requirePomValue(
+                moduleName,
+                'SCM developer connection',
+                pom.scm.developerConnection.text(),
+                'scm:git:ssh://git@github.com/tokenpliot/tokenpilot.git'
+            )
+            requirePomValue(moduleName, 'SCM URL', pom.scm.url.text(), 'https://github.com/tokenpliot/tokenpilot')
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyPublicationMetadata')
 }

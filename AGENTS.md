@@ -331,7 +331,7 @@ The active checklist is in `docs/30_DAY_MVP_REPORT.md`; detailed long-term works
 - Current budget flow is check-then-add, is not an atomic reservation, and may not enforce `BLOCK` before provider invocation.
 - Current Micrometer `ai.token.*` metrics may duplicate Spring AI Observability; preserve compatibility while deciding default suppression or replacement.
 - Spring AI 2.0.0 documentation cannot be assumed to describe the current 1.1.4 runtime exactly; capability detection and supported-version tests are release requirements.
-- Current `LICENSE` is MIT while published POM metadata declares Apache-2.0; release is blocked until they match.
+- The repository, README, JReleaser configuration, and every published module POM use the MIT License. `verifyPublicationMetadata` guards this release contract and ensures the sample app is not published.
 - Sample app E2E uses a fake Spring AI `ChatModel`; real provider API behavior is not yet verified.
 - `token-pilot-spring-ai-starter` does not exist in the current build; never use it as an install instruction until implemented and published.
 - Maven Central release consumption must be re-verified for both core and starter paths before announcing `0.1.0`.
@@ -394,6 +394,9 @@ Stage and deploy a Central release:
 
 - Removed per-request cost rounding, added explicit external-boundary rounding, and made `Cost` amount/currency invariants explicit.
 - Migrated budget policy, decision, state-store, notification, Spring AI, autoconfigure, and sample money interfaces to `Cost` without removing the existing `BudgetKey` and Clock-based monthly-window design.
+- Standardized repository and Maven publication metadata on the MIT License.
+- Added artifact-specific POM descriptions and structured generated-POM verification for all seven public modules.
+- Added the publication metadata check to the normal Gradle `check` lifecycle and verified that the sample app remains unpublished.
 
 ### 2026-07-22
 

@@ -56,4 +56,4 @@ reconciliation.
 
 ## License
 
-MIT
+Token Pilot is licensed under the [MIT License](LICENSE).
