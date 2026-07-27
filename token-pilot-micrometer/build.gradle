@@ -1,5 +1,5 @@
 dependencies {
     api project(':token-pilot-core')
-    implementation 'io.micrometer:micrometer-observation'
-    implementation 'io.micrometer:micrometer-core'
+    implementation 'io.micrometer:micrometer-observation:1.17.0'
+    implementation 'io.micrometer:micrometer-core:1.17.0'
 }

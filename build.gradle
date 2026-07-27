@@ -1,8 +1,11 @@
+import groovy.json.JsonSlurper
 import groovy.xml.XmlSlurper
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import java.util.jar.JarFile
 
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '4.0.5' apply false
+    id 'org.springframework.boot' version '4.1.0' apply false
     id 'io.spring.dependency-management' version '1.1.7' apply false
     id 'org.jreleaser' version '1.24.0'
 }
@@ -16,6 +19,22 @@ def publishedModuleDescriptions = [
     'token-pilot-autoconfigure': 'Spring Boot auto-configuration for Token Pilot core and optional adapters.',
     'token-pilot-starter': 'Spring AI convenience starter that assembles Token Pilot runtime modules.'
 ]
+
+def compatibilityMatrix = [
+    java: 25,
+    springBoot: '4.1.0',
+    springAi: '2.0.0',
+    junit: '6.0.3',
+    assertj: '3.27.7',
+    mockito: '5.23.0'
+]
+
+def springManagedModules = [
+    'token-pilot-spring-ai',
+    'token-pilot-autoconfigure',
+    'token-pilot-starter',
+    'token-pilot-sample-app'
+] as Set
 
 allprojects {
     group = 'cloud.token-pilot'
@@ -51,6 +70,11 @@ jreleaser {
         description = 'Framework-independent Java LLM usage control and accounting core with optional adapters.'
         inceptionYear = '2026'
         license = 'MIT'
+        languages {
+            java {
+                version = compatibilityMatrix.java.toString()
+            }
+        }
         links {
             homepage = 'https://github.com/tokenpliot/tokenpilot'
         }
@@ -125,25 +149,33 @@ jreleaser {
 
 subprojects {
     apply plugin: 'java-library'
-    apply plugin: 'io.spring.dependency-management'
 
     java {
         toolchain {
-            languageVersion = JavaLanguageVersion.of(25)
+            languageVersion = JavaLanguageVersion.of(compatibilityMatrix.java)
         }
     }
 
-    dependencyManagement {
-        imports {
-            mavenBom "org.springframework.boot:spring-boot-dependencies:4.0.5"
-            mavenBom "org.springframework.ai:spring-ai-bom:1.1.4"
+    tasks.withType(JavaCompile).configureEach {
+        options.release = compatibilityMatrix.java
+    }
+
+    if (springManagedModules.contains(name)) {
+        apply plugin: 'io.spring.dependency-management'
+
+        dependencyManagement {
+            imports {
+                mavenBom "org.springframework.boot:spring-boot-dependencies:${compatibilityMatrix.springBoot}"
+                mavenBom "org.springframework.ai:spring-ai-bom:${compatibilityMatrix.springAi}"
+            }
         }
     }
 
     dependencies {
+        testImplementation platform("org.junit:junit-bom:${compatibilityMatrix.junit}")
         testImplementation 'org.junit.jupiter:junit-jupiter'
-        testImplementation 'org.assertj:assertj-core'
-        testImplementation 'org.mockito:mockito-core'
+        testImplementation "org.assertj:assertj-core:${compatibilityMatrix.assertj}"
+        testImplementation "org.mockito:mockito-core:${compatibilityMatrix.mockito}"
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
 
@@ -342,6 +374,280 @@ tasks.register('verifyPublicationMetadata') {
     }
 }
 
-tasks.named('check') {
+tasks.register('verifyCompatibilityMatrix') {
+    group = 'verification'
+    description = 'Verifies the Java 25, Spring Boot 4.1.0, and Spring AI 2.0.0 compatibility baseline.'
     dependsOn tasks.named('verifyPublicationMetadata')
+    dependsOn ':token-pilot-core:classes'
+    dependsOn ':token-pilot-core:generateMetadataFileForMavenJavaPublication'
+
+    doLast {
+        def expectedJavaVersion = compatibilityMatrix.java as Integer
+        def expectedClassMajorVersion = expectedJavaVersion + 44
+
+        subprojects.each { moduleProject ->
+            moduleProject.tasks.withType(JavaCompile).each { compileTask ->
+                def configuredRelease = compileTask.options.release.orNull
+                if (configuredRelease != expectedJavaVersion) {
+                    throw new GradleException(
+                        "${compileTask.path} must compile with --release ${expectedJavaVersion}, but was ${configuredRelease}."
+                    )
+                }
+            }
+        }
+
+        def coreProject = project(':token-pilot-core')
+        def corePomFile = coreProject.layout.buildDirectory
+            .file('publications/mavenJava/pom-default.xml')
+            .get()
+            .asFile
+        def corePom = new XmlSlurper(false, false).parse(corePomFile)
+        def forbiddenGroups = [
+            'org.springframework',
+            'org.springframework.ai',
+            'io.micrometer',
+            'io.projectreactor'
+        ]
+        def forbiddenPomDependencies = corePom.depthFirst().findAll { node ->
+            node.name() == 'dependency' && forbiddenGroups.any {
+                node.groupId.text() == it || node.groupId.text().startsWith("${it}.")
+            }
+        }
+
+        if (!forbiddenPomDependencies.isEmpty()) {
+            throw new GradleException(
+                "token-pilot-core POM must not expose Spring, Spring AI, Micrometer, or Reactor dependencies."
+            )
+        }
+
+        if (corePom.dependencyManagement.size() != 0) {
+            throw new GradleException('token-pilot-core POM must not import a dependency-management BOM.')
+        }
+
+        def coreModuleFile = coreProject.layout.buildDirectory
+            .file('publications/mavenJava/module.json')
+            .get()
+            .asFile
+        def coreModule = new JsonSlurper().parse(coreModuleFile)
+        def publishedVariants = coreModule.variants.findAll {
+            it.name == 'apiElements' || it.name == 'runtimeElements'
+        }
+
+        if (publishedVariants.size() != 2) {
+            throw new GradleException('token-pilot-core module metadata must publish API and runtime variants.')
+        }
+
+        publishedVariants.each { variant ->
+            def publishedJavaVersion = variant.attributes['org.gradle.jvm.version']
+            if (publishedJavaVersion != expectedJavaVersion) {
+                throw new GradleException(
+                    "token-pilot-core ${variant.name} must target Java ${expectedJavaVersion}, but was ${publishedJavaVersion}."
+                )
+            }
+
+            def forbiddenModuleDependencies = (variant.dependencies ?: []).findAll { dependency ->
+                forbiddenGroups.any {
+                    dependency.group == it || dependency.group?.startsWith("${it}.")
+                }
+            }
+            def forbiddenModuleConstraints = (variant.dependencyConstraints ?: []).findAll { dependency ->
+                forbiddenGroups.any {
+                    dependency.group == it || dependency.group?.startsWith("${it}.")
+                }
+            }
+
+            if (!forbiddenModuleDependencies.isEmpty() || !forbiddenModuleConstraints.isEmpty()) {
+                throw new GradleException(
+                    "token-pilot-core ${variant.name} must not expose Spring, Spring AI, Micrometer, or Reactor metadata."
+                )
+            }
+        }
+
+        def coreClassFiles = coreProject.fileTree(
+            coreProject.layout.buildDirectory.dir('classes/java/main')
+        ) {
+            include '**/*.class'
+        }.files
+
+        if (coreClassFiles.isEmpty()) {
+            throw new GradleException('No token-pilot-core class files were found for bytecode verification.')
+        }
+
+        coreClassFiles.each { classFile ->
+            classFile.withDataInputStream { stream ->
+                stream.skipBytes(6)
+                def majorVersion = stream.readUnsignedShort()
+                if (majorVersion != expectedClassMajorVersion) {
+                    throw new GradleException(
+                        "${classFile.name} must use Java ${expectedJavaVersion} class version " +
+                            "${expectedClassMajorVersion}, but was ${majorVersion}."
+                    )
+                }
+            }
+        }
+
+        def resolvedVersions = [:]
+        project(':token-pilot-sample-app')
+            .configurations
+            .runtimeClasspath
+            .incoming
+            .resolutionResult
+            .allComponents
+            .each { component ->
+                if (component.id instanceof ModuleComponentIdentifier) {
+                    resolvedVersions["${component.id.group}:${component.id.module}"] = component.id.version
+                }
+            }
+
+        def requiredVersions = [
+            'org.springframework.boot:spring-boot': compatibilityMatrix.springBoot,
+            'org.springframework.ai:spring-ai-model': compatibilityMatrix.springAi,
+            'org.springframework.ai:spring-ai-client-chat': compatibilityMatrix.springAi
+        ]
+
+        requiredVersions.each { coordinate, expectedVersion ->
+            def actualVersion = resolvedVersions[coordinate]
+            if (actualVersion != expectedVersion) {
+                throw new GradleException(
+                    "${coordinate} must resolve to ${expectedVersion}, but was ${actualVersion}."
+                )
+            }
+        }
+
+        def unsupportedSpringAiVersions = resolvedVersions.findAll { coordinate, version ->
+            coordinate.startsWith('org.springframework.ai:') && version != compatibilityMatrix.springAi
+        }
+        if (!unsupportedSpringAiVersions.isEmpty()) {
+            throw new GradleException(
+                "All Spring AI modules must resolve to ${compatibilityMatrix.springAi}: ${unsupportedSpringAiVersions}"
+            )
+        }
+
+        def unsupportedSpringBootVersions = resolvedVersions.findAll { coordinate, version ->
+            coordinate.startsWith('org.springframework.boot:') && version != compatibilityMatrix.springBoot
+        }
+        if (!unsupportedSpringBootVersions.isEmpty()) {
+            throw new GradleException(
+                "All Spring Boot modules must resolve to ${compatibilityMatrix.springBoot}: ${unsupportedSpringBootVersions}"
+            )
+        }
+
+        def springAiClassOwners = [:].withDefault { [] }
+        project(':token-pilot-sample-app')
+            .configurations
+            .runtimeClasspath
+            .incoming
+            .artifacts
+            .artifacts
+            .findAll {
+                it.id.componentIdentifier instanceof ModuleComponentIdentifier &&
+                    it.file.name.endsWith('.jar')
+            }
+            .each { artifact ->
+                new JarFile(artifact.file).withCloseable { jar ->
+                    jar.entries().findAll { entry ->
+                        !entry.directory &&
+                            entry.name.startsWith('org/springframework/ai/') &&
+                            entry.name.endsWith('.class') &&
+                            !entry.name.endsWith('/module-info.class') &&
+                            !entry.name.endsWith('/package-info.class')
+                    }.each { entry ->
+                        springAiClassOwners[entry.name] << artifact.file.name
+                    }
+                }
+            }
+
+        def duplicateSpringAiClasses = springAiClassOwners.findAll { className, owners ->
+            owners.size() > 1
+        }
+        if (!duplicateSpringAiClasses.isEmpty()) {
+            throw new GradleException(
+                "Duplicate Spring AI classes were found on the starter runtime classpath: ${duplicateSpringAiClasses}"
+            )
+        }
+    }
+}
+
+def coreConsumerDirectory = layout.buildDirectory.dir('compatibility/core-consumer')
+
+tasks.register('prepareCoreConsumer') {
+    group = 'verification'
+    description = 'Generates a repository-external-style Java 25 consumer for the published core artifact.'
+    dependsOn ':token-pilot-core:publishMavenJavaPublicationToStagingRepository'
+    outputs.dir(coreConsumerDirectory)
+
+    doLast {
+        def consumerDirectory = coreConsumerDirectory.get().asFile
+        delete(consumerDirectory)
+
+        def sourceDirectory = new File(consumerDirectory, 'src/main/java/compatibility')
+        sourceDirectory.mkdirs()
+
+        new File(consumerDirectory, 'settings.gradle').text = """
+rootProject.name = 'token-pilot-core-consumer'
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(consumerDirectory, 'build.gradle').text = """
+plugins {
+    id 'application'
+}
+
+repositories {
+    maven { url = uri('${project(':token-pilot-core').layout.buildDirectory.dir('staging-deploy').get().asFile.toURI()}') }
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'cloud.token-pilot:token-pilot-core:${project.version}'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(${compatibilityMatrix.java})
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = ${compatibilityMatrix.java}
+}
+
+application {
+    mainClass = 'compatibility.CoreConsumer'
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(sourceDirectory, 'CoreConsumer.java').text = """
+package compatibility;
+
+import io.tokenpilot.core.domain.Cost;
+import java.math.BigDecimal;
+import java.util.Currency;
+
+public final class CoreConsumer {
+    private CoreConsumer() {
+    }
+
+    public static void main(String[] args) {
+        Cost cost = Cost.of(new BigDecimal("1.25"), Currency.getInstance("USD"));
+        if (!cost.equals(Cost.zero(Currency.getInstance("USD")).add(cost))) {
+            throw new IllegalStateException("Token Pilot core consumer verification failed");
+        }
+        System.out.println("token-pilot-core Java 25 consumer OK");
+    }
+}
+""".stripIndent().trim() + System.lineSeparator()
+    }
+}
+
+tasks.register('verifyCoreConsumer', Exec) {
+    group = 'verification'
+    description = 'Compiles and runs the generated Java 25 core-only consumer.'
+    dependsOn tasks.named('prepareCoreConsumer')
+    workingDir coreConsumerDirectory
+    commandLine rootProject.file('gradlew').absolutePath, '--no-daemon', 'run'
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyCompatibilityMatrix')
+    dependsOn tasks.named('verifyCoreConsumer')
 }

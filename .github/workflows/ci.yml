@@ -1,4 +1,4 @@
-name: Spring AI Ledger CI
+name: Token Pilot Compatibility CI
 
 on:
   pull_request:

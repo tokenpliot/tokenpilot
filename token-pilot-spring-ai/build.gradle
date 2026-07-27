@@ -2,7 +2,6 @@ dependencies {
     api project(':token-pilot-core')
     implementation project(':token-pilot-budget')
 
-    // 1.1.x 버전부터 spring-ai-core가 분리됨
     implementation 'org.springframework.ai:spring-ai-model'
     implementation 'org.springframework.ai:spring-ai-client-chat'
     

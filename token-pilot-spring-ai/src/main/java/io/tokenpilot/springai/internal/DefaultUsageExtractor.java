@@ -9,7 +9,8 @@ import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.EmptyUsage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.model.ModelOptionsUtils;
+import org.springframework.ai.util.JacksonUtils;
+import tools.jackson.core.type.TypeReference;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,6 +22,7 @@ import java.util.Map;
  * Provider가 비포괄 총량을 반환하면 Token Pilot의 포괄 총량 계약에 맞게 정규화합니다.
  */
 public class DefaultUsageExtractor implements UsageExtractor {
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     @Override
     public TokenUsage extract(ChatClientResponse response) {
@@ -150,7 +152,7 @@ public class DefaultUsageExtractor implements UsageExtractor {
             return Map.of();
         }
         try {
-            return ModelOptionsUtils.objectToMap(nativeUsage);
+            return JacksonUtils.getDefaultJsonMapper().convertValue(nativeUsage, MAP_TYPE);
         }
         catch (RuntimeException ignored) {
             return Map.of();

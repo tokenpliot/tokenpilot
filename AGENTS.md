@@ -60,7 +60,7 @@ Token Pilot의 제품 포지션은 framework-independent Java LLM control and ac
 - `token-pilot-spring-ai` translates Spring AI requests and `Usage` into Token Pilot core interfaces; it must not own duplicated policy or accounting logic.
 - `token-pilot-micrometer` remains optional. Core behavior must work without Micrometer.
 - When Spring AI Observability is present, reuse its standard latency, trace, and input/output/total token telemetry instead of emitting duplicate default token metrics.
-- The repository currently compiles against Spring AI 1.1.4 while the differentiation report evaluates 2.0.0. Decide the 0.1.0 support/migration matrix through an ADR and test each supported version before changing metric defaults.
+- The 0.1.0 compatibility baseline is Java 25 bytecode/runtime, Spring Boot 4.1.0, and Spring AI 2.0.0. This is the only supported framework combination until another matrix entry is deliberately added and tested.
 - Token Pilot-owned telemetry focuses on cost, preflight decisions, budget reservations, pricing misses, and estimate/actual reconciliation.
 - The existing `token-pilot-starter` remains the Spring AI convenience distribution for compatibility. Do not present it as the only product entrypoint.
 - `token-pilot-core` and the Spring AI starter must be separately consumable artifacts with the same project version.
@@ -72,11 +72,11 @@ Token Pilot의 제품 포지션은 framework-independent Java LLM control and ac
 | Module | Status | Notes |
 | --- | --- | --- |
 | `token-pilot-core` | Basic implementation complete | Domain records, pricing, calculator, registry, ledger manager |
-| `token-pilot-spring-ai` | Basic implementation complete | `UsageExtractor`, `LedgerAdvisor`, response usage recording |
+| `token-pilot-spring-ai` | Basic implementation complete | Spring AI 2.0.0 `UsageExtractor`, `LedgerAdvisor`, response usage recording |
 | `token-pilot-micrometer` | Basic implementation complete | `MetricsOptions`, tag whitelist, and metric metadata exist; metric ownership must be narrowed |
 | `token-pilot-budget` | Basic non-atomic implementation | Typed monthly keys and Clock/ZoneId windows implemented; needs BLOCK enforcement, reservation, idempotency, and reconciliation |
 | `token-pilot-notification` | Basic implementation complete | Event API and deduplication exist; not yet connected to the full advisor/budget lifecycle |
-| `token-pilot-autoconfigure` | Basic implementation complete | Bean registration, property binding, pricing/budget/notification wiring, and ChatClient customizer implemented |
+| `token-pilot-autoconfigure` | Basic implementation complete | Bean registration, property binding, pricing/budget/notification wiring, and `ChatClientBuilderCustomizer` implemented |
 | `token-pilot-starter` | Basic implementation complete | Thin final user entrypoint that brings runtime modules together |
 | `token-pilot-sample-app` | Basic E2E complete | Direct ledger metrics, budget, and fake Spring AI advisor E2E implemented |
 
@@ -87,7 +87,7 @@ The active scope is the 30-day MVP in `docs/30_DAY_MVP_REPORT.md`. Work in this 
 1. **Correctness baseline** — token total/breakdown invariants, money precision, missing-pricing policy, BLOCK enforcement, budget windows, listener failure policy, and license metadata.
 2. **Preflight core** — framework-independent estimator contract, UTF-8 heuristic result with `exact=false`, explicit scope and safe upper bound, versioned model/context metadata, and `TokenBudget.check()`.
 3. **Spend control** — atomic reservation state machine, idempotency, concurrency tests, and estimate/actual reconciliation.
-4. **Optional integration** — Spring AI version/capability ADR, adapter/autoconfiguration, Token Pilot-owned metrics, plain-Java sample, Spring sample, and external artifact consumption.
+4. **Optional integration** — the Java 25/Boot 4.1.0/Spring AI 2.0.0 adapter and autoconfiguration, Token Pilot-owned metrics, plain-Java sample, Spring sample, and external artifact consumption.
 
 Do not start exact BPE, routing, fallback, standalone HTTP gateway, durable stores, or multi-tenant administration before the MVP exit criteria pass.
 
@@ -163,7 +163,7 @@ The autoconfigure module provides:
   - `BudgetEvaluator`
   - `BudgetStateStore`
   - `MicroCostMetricsPublisher`
-  - `ChatClientCustomizer`
+  - `ChatClientBuilderCustomizer`
   - `NotificationStateStore`
   - `BudgetNotificationService`
 
@@ -198,7 +198,7 @@ Default bean graph:
 | `MicroCostMetricsPublisher` | Micrometer classpath + `token-pilot.metrics.enabled` | Cost/token metrics listener |
 | `BudgetStateStore` | `token-pilot.budget.enabled` + missing bean | Default in-memory budget state |
 | `BudgetEvaluator` | `token-pilot.budget.enabled` + missing bean | Default budget evaluator |
-| `ChatClientCustomizer` | Spring AI classpath + `LedgerAdvisor` bean | Adds advisor to ChatClient builders |
+| `ChatClientBuilderCustomizer` | Spring AI classpath + `LedgerAdvisor` bean | Adds advisor to ChatClient builders |
 | `NotificationStateStore` | `token-pilot.notification.enabled` + missing bean | Window-based notification deduplication state |
 | `BudgetNotificationService` | `token-pilot.notification.enabled` + `BudgetNotificationHandler` bean | Publishes budget notification events to user-defined handler |
 
@@ -213,7 +213,7 @@ Autoconfigure tests should use `ApplicationContextRunner` and verify:
 - budget beans do not register by default
 - budget beans register when budget is enabled
 - budget-enabled `LedgerAdvisor` calls `BudgetEvaluator`
-- Spring AI classpath registers `UsageExtractor`, `LedgerAdvisor`, and `ChatClientCustomizer`
+- Spring AI classpath registers `UsageExtractor`, `LedgerAdvisor`, and `ChatClientBuilderCustomizer`
 - notification beans do not register by default
 - notification beans register when notification is enabled and `BudgetNotificationHandler` bean exists
 
@@ -330,7 +330,7 @@ The active checklist is in `docs/30_DAY_MVP_REPORT.md`; detailed long-term works
 - Spring AI usage extraction converts map/JSON-compatible native usage objects into the normalized core model. Real-provider compatibility fixtures remain required because provider and Spring AI usage shapes can change independently.
 - Current budget flow is check-then-add, is not an atomic reservation, and may not enforce `BLOCK` before provider invocation.
 - Current Micrometer `ai.token.*` metrics may duplicate Spring AI Observability; preserve compatibility while deciding default suppression or replacement.
-- Spring AI 2.0.0 documentation cannot be assumed to describe the current 1.1.4 runtime exactly; capability detection and supported-version tests are release requirements.
+- The verified Spring AI 2.0.0 path is synchronous `ChatClient` usage recording with a fake provider. Streaming cancellation and reconciliation remain outside the current compatibility guarantee.
 - The repository, README, JReleaser configuration, and every published module POM use the MIT License. `verifyPublicationMetadata` guards this release contract and ensures the sample app is not published.
 - Sample app E2E uses a fake Spring AI `ChatModel`; real provider API behavior is not yet verified.
 - `token-pilot-spring-ai-starter` does not exist in the current build; never use it as an install instruction until implemented and published.
@@ -342,6 +342,12 @@ Run all tests:
 
 ```bash
 ./gradlew test
+```
+
+Verify the fixed Java/Spring compatibility matrix and generated core-only consumer:
+
+```bash
+./gradlew verifyCompatibilityMatrix verifyCoreConsumer
 ```
 
 Run sample app after implementation work:
@@ -392,6 +398,9 @@ Stage and deploy a Central release:
 
 ### 2026-07-27
 
+- Fixed the 0.1.0 compatibility baseline to Java 25 bytecode/runtime, Spring Boot 4.1.0, and Spring AI 2.0.0.
+- Migrated Spring AI integration to the 2.0 APIs, including `ChatClientBuilderCustomizer` and Jackson 3-compatible native usage conversion.
+- Added build-time verification for Java 25 class files, exact Spring dependency resolution, framework-free core publication metadata, and a generated core-only Java 25 consumer.
 - Removed per-request cost rounding, added explicit external-boundary rounding, and made `Cost` amount/currency invariants explicit.
 - Migrated budget policy, decision, state-store, notification, Spring AI, autoconfigure, and sample money interfaces to `Cost` without removing the existing `BudgetKey` and Clock-based monthly-window design.
 - Standardized repository and Maven publication metadata on the MIT License.

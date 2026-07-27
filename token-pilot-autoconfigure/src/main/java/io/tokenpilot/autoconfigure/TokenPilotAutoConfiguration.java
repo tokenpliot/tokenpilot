@@ -133,8 +133,8 @@ public class TokenPilotAutoConfiguration {
     @Bean
     @ConditionalOnBean(LedgerAdvisor.class)
     @ConditionalOnClass(ChatClient.class)
-    public LedgerChatClientCustomizer ledgerChatClientCustomizer(LedgerAdvisor ledgerAdvisor) {
-        return new LedgerChatClientCustomizer(ledgerAdvisor);
+    public LedgerChatClientBuilderCustomizer ledgerChatClientBuilderCustomizer(LedgerAdvisor ledgerAdvisor) {
+        return new LedgerChatClientBuilderCustomizer(ledgerAdvisor);
     }
 
     /**

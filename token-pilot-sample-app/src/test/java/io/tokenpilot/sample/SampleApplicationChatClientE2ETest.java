@@ -2,7 +2,7 @@ package io.tokenpilot.sample;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.ChatClientCustomizer;
+import org.springframework.ai.chat.client.ChatClientBuilderCustomizer;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.DefaultUsage;
@@ -96,7 +96,7 @@ class SampleApplicationChatClientE2ETest {
         @Bean
         ChatClient.Builder chatClientBuilder(
                 ChatModel chatModel,
-                ObjectProvider<ChatClientCustomizer> customizers
+                ObjectProvider<ChatClientBuilderCustomizer> customizers
         ) {
             ChatClient.Builder builder = ChatClient.builder(chatModel);
             customizers.orderedStream()

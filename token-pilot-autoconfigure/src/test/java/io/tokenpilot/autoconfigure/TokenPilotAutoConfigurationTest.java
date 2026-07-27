@@ -73,7 +73,7 @@ class TokenPilotAutoConfigurationTest {
 
             assertThat(context).hasSingleBean(UsageExtractor.class);
             assertThat(context).hasSingleBean(LedgerAdvisor.class);
-            assertThat(context).hasSingleBean(LedgerChatClientCustomizer.class);
+            assertThat(context).hasSingleBean(LedgerChatClientBuilderCustomizer.class);
 
             assertThat(context).doesNotHaveBean(BudgetStateStore.class);
             assertThat(context).doesNotHaveBean(BudgetEvaluator.class);
