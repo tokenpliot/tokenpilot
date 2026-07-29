@@ -47,7 +47,7 @@ public class BudgetNotificationService {
             current,
             decision.state(),
             decision.reason(),
-            decision.currentUsage(),
+            decision.projectedUsage(),
             decision.limit(),
             tags
         );

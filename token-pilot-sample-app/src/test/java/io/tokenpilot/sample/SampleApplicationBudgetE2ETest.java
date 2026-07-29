@@ -42,7 +42,7 @@ class SampleApplicationBudgetE2ETest {
                 .contains("\"enabled\":\"true\"")
                 .contains("\"initialState\":\"ALLOW\"")
                 .contains("\"blockedState\":\"BLOCK\"")
-                .contains("\"currentUsage\":\"0.005500\"")
+                .contains("\"projectedUsage\":\"0.005500\"")
                 .contains("\"limit\":\"0.005000\"");
     }
 

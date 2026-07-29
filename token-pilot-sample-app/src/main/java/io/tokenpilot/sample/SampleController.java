@@ -2,8 +2,8 @@ package io.tokenpilot.sample;
 
 import io.tokenpilot.budget.BudgetDecision;
 import io.tokenpilot.budget.BudgetEvaluator;
+import io.tokenpilot.budget.BudgetState;
 import io.tokenpilot.budget.BudgetStateStore;
-import io.tokenpilot.budget.exception.BudgetExceededException;
 import io.tokenpilot.core.LedgerManager;
 import io.tokenpilot.core.domain.Cost;
 import io.tokenpilot.core.domain.TokenUsage;
@@ -96,23 +96,21 @@ public class SampleController {
                 Cost.of(new BigDecimal("0.0045"), initialDecision.limit().currency())
         );
 
-        try {
-            evaluator.evaluate(tags, projectedCost);
-            return Map.of(
-                    "enabled", "true",
-                    "initialState", initialDecision.state().name(),
-                    "blockedState", "NONE"
-            );
-        } catch (BudgetExceededException exception) {
-            BudgetDecision blockedDecision = exception.getDecision();
+        BudgetDecision blockedDecision = evaluator.evaluate(tags, projectedCost);
+        if (blockedDecision.state() == BudgetState.BLOCK) {
             return Map.of(
                     "enabled", "true",
                     "initialState", initialDecision.state().name(),
                     "blockedState", blockedDecision.state().name(),
-                    "currentUsage", CostBoundaryFormatter.format(blockedDecision.currentUsage()),
+                    "projectedUsage", CostBoundaryFormatter.format(blockedDecision.projectedUsage()),
                     "limit", CostBoundaryFormatter.format(blockedDecision.limit())
             );
         }
+        return Map.of(
+                "enabled", "true",
+                "initialState", initialDecision.state().name(),
+                "blockedState", "NONE"
+        );
     }
 
 }

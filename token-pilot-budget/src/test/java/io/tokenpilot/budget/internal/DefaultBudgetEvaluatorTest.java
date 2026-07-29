@@ -1,13 +1,13 @@
 package io.tokenpilot.budget.internal;
 
 import io.tokenpilot.budget.BudgetDecision;
+import io.tokenpilot.budget.BudgetDecision.EvaluationType;
 import io.tokenpilot.budget.BudgetKey;
 import io.tokenpilot.budget.BudgetPolicy;
 import io.tokenpilot.budget.BudgetState;
 import io.tokenpilot.budget.BudgetStateStore;
 import io.tokenpilot.budget.BudgetThreshold;
 import io.tokenpilot.budget.BudgetWindow;
-import io.tokenpilot.budget.exception.BudgetExceededException;
 import io.tokenpilot.core.domain.Cost;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,31 +49,67 @@ class DefaultBudgetEvaluatorTest {
     store = mock(BudgetStateStore.class);
   }
 
-  @Test
-  void 예상_비용을_포함해_임계치를_판정한다() {
+  @ParameterizedTest
+  @CsvSource({
+      "10.00, 20.00, 30.00, ALLOW, NONE",
+      "70.00, 10.00, 80.00, WARN, WARNING"
+  })
+  void 한도_미만의_예상_비용을_포함해_ALLOW와_WARN을_판정한다(
+      String committed,
+      String candidate,
+      String projected,
+      BudgetState expectedState,
+      BudgetThreshold expectedThreshold
+  ) {
     DefaultBudgetEvaluator evaluator = evaluator(policy(null, ZoneOffset.UTC), "2026-07-22T00:00:00Z");
-    when(store.getAccumulatedCost(any(), any())).thenReturn(usd("70.00"));
+    when(store.getAccumulatedCost(any(), any())).thenReturn(usd(committed));
 
-    BudgetDecision result = evaluator.evaluate(TAGS, usd("10.00"));
+    BudgetDecision result = evaluator.evaluate(TAGS, usd(candidate));
 
-    assertThat(result.state()).isEqualTo(BudgetState.WARN);
-    assertThat(result.threshold()).isEqualTo(BudgetThreshold.WARNING);
+    assertThat(result.state()).isEqualTo(expectedState);
+    assertThat(result.threshold()).isEqualTo(expectedThreshold);
     assertThat(result.key()).isEqualTo(key("policy-a", "tenant-a", "2026-07"));
-    assertThat(result.currentUsage()).isEqualTo(usd("80.00"));
+    assertThat(result.evaluationType()).isEqualTo(EvaluationType.ADMISSION);
+    assertThat(result.committedUsage()).isEqualTo(usd(committed));
+    assertThat(result.projectedUsage()).isEqualTo(usd(projected));
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+      "90.00, 10.00, 100.00",
+      "95.00, 10.00, 105.00"
+  })
+  void 예상_사용량이_한도와_같거나_크면_예외_없이_BLOCK을_반환한다(
+      String committed,
+      String candidate,
+      String projected
+  ) {
+    DefaultBudgetEvaluator evaluator = evaluator(policy(null, ZoneOffset.UTC), "2026-07-22T00:00:00Z");
+    when(store.getAccumulatedCost(any(), any())).thenReturn(usd(committed));
+
+    BudgetDecision decision = evaluator.evaluate(TAGS, usd(candidate));
+
+    assertThat(decision.state()).isEqualTo(BudgetState.BLOCK);
+    assertThat(decision.threshold()).isEqualTo(BudgetThreshold.EXCEEDED);
+    assertThat(decision.evaluationType()).isEqualTo(EvaluationType.ADMISSION);
+    assertThat(decision.key()).isEqualTo(key("policy-a", "tenant-a", "2026-07"));
+    assertThat(decision.committedUsage()).isEqualTo(usd(committed));
+    assertThat(decision.projectedUsage()).isEqualTo(usd(projected));
+    assertThat(decision.limit()).isEqualTo(usd("100.00"));
+    verify(store, never()).addCost(any(), any(), any());
   }
 
   @Test
-  void 예산_초과시_동일_key를_포함한_예외가_발생한다() {
+  void 후보_없는_상태_조회는_admission_결과가_아니다() {
     DefaultBudgetEvaluator evaluator = evaluator(policy(null, ZoneOffset.UTC), "2026-07-22T00:00:00Z");
-    when(store.getAccumulatedCost(any(), any())).thenReturn(usd("95.00"));
+    when(store.getAccumulatedCost(any(), any())).thenReturn(usd("40.00"));
 
-    assertThatThrownBy(() -> evaluator.evaluate(TAGS, usd("10.00")))
-        .isInstanceOf(BudgetExceededException.class)
-        .extracting(exception -> ((BudgetExceededException) exception).getDecision())
-        .satisfies(decision -> {
-          assertThat(decision.state()).isEqualTo(BudgetState.BLOCK);
-          assertThat(decision.key()).isEqualTo(key("policy-a", "tenant-a", "2026-07"));
-        });
+    BudgetDecision decision = evaluator.evaluate(TAGS);
+
+    assertThat(decision.evaluationType()).isEqualTo(EvaluationType.STATUS);
+    assertThat(decision.isAdmissionDecision()).isFalse();
+    assertThat(decision.committedUsage()).isEqualTo(usd("40.00"));
+    assertThat(decision.projectedUsage()).isEqualTo(decision.committedUsage());
   }
 
   @Test
@@ -166,8 +202,11 @@ class DefaultBudgetEvaluatorTest {
     );
 
     assertThat(decision.state()).isEqualTo(BudgetState.CURRENCY_MISMATCH);
-    assertThat(decision.currentUsage()).isEqualTo(usd("10.00"));
+    assertThat(decision.evaluationType()).isEqualTo(EvaluationType.ADMISSION);
+    assertThat(decision.committedUsage()).isEqualTo(usd("10.00"));
+    assertThat(decision.projectedUsage()).isEqualTo(decision.committedUsage());
     assertThat(decision.limit()).isEqualTo(usd("100.00"));
+    verify(store, never()).addCost(any(), any(), any());
   }
 
   private DefaultBudgetEvaluator evaluator(BudgetPolicy policy, String instant) {

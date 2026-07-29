@@ -1,6 +1,7 @@
 package io.tokenpilot.notification;
 
 import io.tokenpilot.budget.BudgetDecision;
+import io.tokenpilot.budget.BudgetDecision.EvaluationType;
 import io.tokenpilot.budget.BudgetKey;
 import io.tokenpilot.budget.BudgetState;
 import io.tokenpilot.budget.BudgetThreshold;
@@ -68,6 +69,8 @@ class BudgetNotificationServiceTest {
     verify(store).getLastNotifiedThreshold(same(key));
     verify(store).updateLastNotifiedThreshold(same(key), same(BudgetThreshold.HALF));
     assertThat(event.getValue().key()).isSameAs(key);
+    assertThat(event.getValue().projectedUsage())
+        .isEqualTo(Cost.of(new BigDecimal("50"), Currency.getInstance("USD")));
   }
 
   private static BudgetKey key(String window) {
@@ -81,9 +84,11 @@ class BudgetNotificationServiceTest {
   ) {
     return new BudgetDecision(
         key,
+        EvaluationType.ADMISSION,
         BudgetState.WARN,
         threshold,
         threshold.name(),
+        Cost.of(new BigDecimal(usage), Currency.getInstance("USD")),
         Cost.of(new BigDecimal(usage), Currency.getInstance("USD")),
         Cost.of(new BigDecimal("100"), Currency.getInstance("USD"))
     );

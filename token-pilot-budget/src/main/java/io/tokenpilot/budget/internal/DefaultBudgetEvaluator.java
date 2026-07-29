@@ -1,6 +1,7 @@
 package io.tokenpilot.budget.internal;
 
 import io.tokenpilot.budget.BudgetDecision;
+import io.tokenpilot.budget.BudgetDecision.EvaluationType;
 import io.tokenpilot.budget.BudgetEvaluator;
 import io.tokenpilot.budget.BudgetKey;
 import io.tokenpilot.budget.BudgetPolicy;
@@ -8,7 +9,6 @@ import io.tokenpilot.budget.BudgetState;
 import io.tokenpilot.budget.BudgetStateStore;
 import io.tokenpilot.budget.BudgetThreshold;
 import io.tokenpilot.budget.BudgetWindow;
-import io.tokenpilot.budget.exception.BudgetExceededException;
 import io.tokenpilot.core.domain.Cost;
 
 import java.math.BigDecimal;
@@ -16,6 +16,11 @@ import java.time.Clock;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * 현재 구현이 지원하는 snapshot은 확정 비용과 후보 비용입니다.
+ * {@code projectedUsage = committedUsage + candidateCost}이며 active reservation과
+ * reconciliation liability는 #36, #37에서 추가됩니다.
+ */
 public class DefaultBudgetEvaluator implements BudgetEvaluator {
 
   private final BudgetStateStore store;
@@ -29,33 +34,41 @@ public class DefaultBudgetEvaluator implements BudgetEvaluator {
   }
 
   @Override
-  public BudgetDecision evaluate(Map<String, String> tags, Cost cost) {
-    Objects.requireNonNull(cost, "cost must not be null");
+  public BudgetDecision evaluate(Map<String, String> tags, Cost candidateCost) {
+    Objects.requireNonNull(candidateCost, "candidateCost must not be null");
     BudgetKey key = resolveKey(tags);
-    Cost currentUsage = store.getAccumulatedCost(key, policy.monthlyLimit());
-    if (!policy.monthlyLimit().currency().equals(cost.currency())) {
+    Cost committedUsage = store.getAccumulatedCost(key, policy.monthlyLimit());
+    if (!policy.monthlyLimit().currency().equals(candidateCost.currency())) {
       return decision(
           key,
+          EvaluationType.ADMISSION,
           BudgetState.CURRENCY_MISMATCH,
           BudgetThreshold.NONE,
           "예산 통화와 비용 통화가 일치하지 않습니다",
-          currentUsage
+          committedUsage,
+          committedUsage
       );
     }
 
-    Cost usage = currentUsage.add(cost);
-    BudgetDecision decision = decide(key, usage);
-    if (decision.state() == BudgetState.BLOCK) {
-      throw new BudgetExceededException(decision);
-    }
-    return decision;
+    Cost projectedUsage = committedUsage.add(candidateCost);
+    return decide(
+        key,
+        EvaluationType.ADMISSION,
+        committedUsage,
+        projectedUsage
+    );
   }
 
   @Override
   public BudgetDecision evaluate(Map<String, String> tags) {
     BudgetKey key = resolveKey(tags);
-    Cost usage = store.getAccumulatedCost(key, policy.monthlyLimit());
-    return decide(key, usage);
+    Cost committedUsage = store.getAccumulatedCost(key, policy.monthlyLimit());
+    return decide(
+        key,
+        EvaluationType.STATUS,
+        committedUsage,
+        committedUsage
+    );
   }
 
   private BudgetKey resolveKey(Map<String, String> tags) {
@@ -77,35 +90,76 @@ public class DefaultBudgetEvaluator implements BudgetEvaluator {
     );
   }
 
-  private BudgetDecision decide(BudgetKey key, Cost usage) {
+  private BudgetDecision decide(
+      BudgetKey key,
+      EvaluationType evaluationType,
+      Cost committedUsage,
+      Cost projectedUsage
+  ) {
     Cost halfThreshold = threshold("0.5");
     Cost warningThreshold = threshold("0.8");
 
-    if (usage.compareTo(policy.monthlyLimit()) >= 0) {
-      return decision(key, BudgetState.BLOCK, BudgetThreshold.EXCEEDED, "월 예산을 초과했습니다", usage);
+    if (projectedUsage.compareTo(policy.monthlyLimit()) >= 0) {
+      return decision(
+          key,
+          evaluationType,
+          BudgetState.BLOCK,
+          BudgetThreshold.EXCEEDED,
+          "월 예산을 초과했습니다",
+          committedUsage,
+          projectedUsage
+      );
     }
-    if (usage.compareTo(warningThreshold) >= 0) {
-      return decision(key, BudgetState.WARN, BudgetThreshold.WARNING, "월 예산의 80% 이상 사용", usage);
+    if (projectedUsage.compareTo(warningThreshold) >= 0) {
+      return decision(
+          key,
+          evaluationType,
+          BudgetState.WARN,
+          BudgetThreshold.WARNING,
+          "월 예산의 80% 이상 사용",
+          committedUsage,
+          projectedUsage
+      );
     }
-    if (usage.compareTo(halfThreshold) >= 0) {
-      return decision(key, BudgetState.ALLOW, BudgetThreshold.HALF, "월 예산의 50% 이상 사용", usage);
+    if (projectedUsage.compareTo(halfThreshold) >= 0) {
+      return decision(
+          key,
+          evaluationType,
+          BudgetState.ALLOW,
+          BudgetThreshold.HALF,
+          "월 예산의 50% 이상 사용",
+          committedUsage,
+          projectedUsage
+      );
     }
-    return decision(key, BudgetState.ALLOW, BudgetThreshold.NONE, "정상 범위 사용", usage);
+    return decision(
+        key,
+        evaluationType,
+        BudgetState.ALLOW,
+        BudgetThreshold.NONE,
+        "정상 범위 사용",
+        committedUsage,
+        projectedUsage
+    );
   }
 
   private BudgetDecision decision(
       BudgetKey key,
+      EvaluationType evaluationType,
       BudgetState state,
       BudgetThreshold threshold,
       String reason,
-      Cost usage
+      Cost committedUsage,
+      Cost projectedUsage
   ) {
     return new BudgetDecision(
         key,
+        evaluationType,
         state,
         threshold,
         reason,
-        usage,
+        committedUsage,
+        projectedUsage,
         policy.monthlyLimit()
     );
   }

@@ -4,7 +4,7 @@
 
 Token Pilot is evolving from a Spring AI usage-tracking starter into a framework-independent Java LLM control and accounting core with optional framework and observability adapters.
 
-Current truth: post-call usage normalization, cost calculation, ledger events, Micrometer publishing, Clock-based monthly budget windows, basic non-atomic budget evaluation, Spring AI integration, and starter autoconfiguration are implemented. Preflight estimation, context admission, atomic reservation, and estimate/actual reconciliation are 30-day MVP targets, not current capabilities.
+Current truth: post-call usage normalization, cost calculation, ledger events, Micrometer publishing, Clock-based monthly budget windows, pure budget decisions, legacy provider-boundary BLOCK enforcement, Spring AI integration, and starter autoconfiguration are implemented. Candidate-aware preflight admission, context admission, atomic reservation, and estimate/actual reconciliation are 30-day MVP targets, not current capabilities.
 
 Distribution direction: publish a framework-independent core and an optional Spring AI convenience starter from the same repository and release train. The existing starter artifact is `token-pilot-starter`; `token-pilot-spring-ai-starter` is only a target name until a compatibility ADR and module change land.
 
@@ -74,7 +74,7 @@ Token Pilot의 제품 포지션은 framework-independent Java LLM control and ac
 | `token-pilot-core` | Basic implementation complete | Domain records, pricing, calculator, registry, ledger manager |
 | `token-pilot-spring-ai` | Basic implementation complete | Spring AI 2.0.0 `UsageExtractor`, `LedgerAdvisor`, response usage recording |
 | `token-pilot-micrometer` | Basic implementation complete | `MetricsOptions`, tag whitelist, and metric metadata exist; metric ownership must be narrowed |
-| `token-pilot-budget` | Basic non-atomic implementation | Typed monthly keys and Clock/ZoneId windows implemented; needs BLOCK enforcement, reservation, idempotency, and reconciliation |
+| `token-pilot-budget` | Basic non-atomic implementation | Typed monthly keys, Clock/ZoneId windows, pure status/admission decisions, and legacy BLOCK enforcement implemented; needs candidate estimation, reservation, idempotency, and reconciliation |
 | `token-pilot-notification` | Basic implementation complete | Event API and deduplication exist; not yet connected to the full advisor/budget lifecycle |
 | `token-pilot-autoconfigure` | Basic implementation complete | Bean registration, property binding, pricing/budget/notification wiring, and `ChatClientBuilderCustomizer` implemented |
 | `token-pilot-starter` | Basic implementation complete | Thin final user entrypoint that brings runtime modules together |
@@ -328,7 +328,7 @@ The active checklist is in `docs/30_DAY_MVP_REPORT.md`; detailed long-term works
 - Budget money interfaces now use `Cost` while preserving `BudgetKey`, `BudgetPolicy`, Clock/ZoneId monthly windows, and per-key policy snapshots.
 - Until the typed missing-pricing policy lands, `DefaultLedgerManager` preserves the legacy fail-open result as an explicit zero USD `Cost`; do not confuse that compatibility behavior with a priced zero-rate plan.
 - Spring AI usage extraction converts map/JSON-compatible native usage objects into the normalized core model. Real-provider compatibility fixtures remain required because provider and Spring AI usage shapes can change independently.
-- Current budget flow is check-then-add, is not an atomic reservation, and may not enforce `BLOCK` before provider invocation.
+- Current legacy budget flow blocks an already-exhausted status before provider invocation, but it remains check-then-add and is not candidate-aware admission or an atomic reservation.
 - Current Micrometer `ai.token.*` metrics may duplicate Spring AI Observability; preserve compatibility while deciding default suppression or replacement.
 - The verified Spring AI 2.0.0 path is synchronous `ChatClient` usage recording with a fake provider. Streaming cancellation and reconciliation remain outside the current compatibility guarantee.
 - The repository, README, JReleaser configuration, and every published module POM use the MIT License. `verifyPublicationMetadata` guards this release contract and ensures the sample app is not published.
@@ -395,6 +395,12 @@ Stage and deploy a Central release:
 ```
 
 ## Update History
+
+### 2026-07-29
+
+- Separated pure budget decisions from provider-boundary enforcement: evaluator BLOCK and currency mismatch outcomes now return structured decisions.
+- Distinguished committed usage from candidate-inclusive projected usage and marked candidate-free status results as non-admission evidence.
+- Added legacy Spring AI BLOCK enforcement before provider invocation while leaving candidate-aware admission, atomic reservation, and reconciliation to #39, #36, and #37.
 
 ### 2026-07-27
 

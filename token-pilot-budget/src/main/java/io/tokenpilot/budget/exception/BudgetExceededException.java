@@ -2,23 +2,20 @@ package io.tokenpilot.budget.exception;
 
 import io.tokenpilot.budget.BudgetDecision;
 
+import java.util.Objects;
+
 /**
- * BudgetExceededException은 "LLM 호출을 멈추기 위해" 던지는 예외이다.
- *
- * 이 예외가 던져지는 순간:
- * - Spring AI 호출 체인이 중단된다
- * - 실제 LLM API 요청은 나가지 않는다
- *
- * 즉, 이것이 바로 비용 기반 Circuit Breaker 역할을 한다.
+ * Provider 경계에서 BLOCK decision을 집행할 때 던지는 예외입니다.
+ * <p>
+ * {@code BudgetEvaluator}는 이 예외를 직접 던지지 않습니다. Provider invocation 직전의
+ * 경계가 원래 decision을 보존한 이 예외를 던져 호출 체인을 중단합니다.
  */
 public class BudgetExceededException extends RuntimeException {
 
-  // 어떤 판단으로 차단되었는지 담고 있음
   private final BudgetDecision decision;
 
   public BudgetExceededException(BudgetDecision decision) {
-    // Exception 메시지로 reason을 사용
-    super(decision.reason());
+    super(Objects.requireNonNull(decision, "decision must not be null").reason());
     this.decision = decision;
   }
 

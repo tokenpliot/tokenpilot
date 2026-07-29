@@ -15,7 +15,7 @@ public record BudgetNotificationEvent(
     BudgetThreshold threshold,
     BudgetState state,
     String reason,
-    Cost currentUsage,
+    Cost projectedUsage,
     Cost limit,
     Map<String, String> tags
 ) {}

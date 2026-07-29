@@ -231,7 +231,7 @@ class TokenPilotAutoConfigurationTest {
 
                 assertThat(decision.key().window()).isEqualTo(BudgetWindow.parse("2026-08"));
                 assertThat(decision.threshold()).isEqualTo(BudgetThreshold.HALF);
-                assertThat(decision.currentUsage().value()).isEqualByComparingTo("50.00");
+                assertThat(decision.committedUsage().value()).isEqualByComparingTo("50.00");
             });
     }
 
@@ -411,9 +411,11 @@ class TokenPilotAutoConfigurationTest {
                     tags.get("tenant_id"),
                     BudgetWindow.parse("2026-07")
                 ),
+                BudgetDecision.EvaluationType.STATUS,
                 BudgetState.ALLOW,
                 BudgetThreshold.NONE,
                 "allowed",
+                Cost.zero(Currency.getInstance("USD")),
                 Cost.zero(Currency.getInstance("USD")),
                 Cost.of(BigDecimal.TEN, Currency.getInstance("USD"))
             );

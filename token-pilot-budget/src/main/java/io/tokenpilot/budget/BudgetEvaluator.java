@@ -6,24 +6,32 @@ import java.util.Map;
 
 
 /**
- * AI 호출 전 예산 초과 여부를 판단하는 인터페이스입니다.
+ * 부수 효과 없이 예산 상태를 판단하는 인터페이스입니다.
  * <p>
- * 구현체는 현재까지 누적된 비용과
- * 이번 호출로 발생할 비용을 기준으로
- * 호출을 허용하거나 차단하는 역할을 합니다.
+ * 구현체는 판단 결과를 구조화된 {@link BudgetDecision}으로 반환하며 provider 호출을 직접
+ * 차단하거나 알림/metric listener를 호출하지 않습니다. Provider 경계는 반환된 decision을
+ * 별도로 집행해야 합니다.
  */
 public interface BudgetEvaluator {
 
   /**
-   * 단순히 현재의 누적 비용이 예산 한도를 초과했는지만 판단합니다. (부수 효과 없음)
+   * 현재 확정 사용량만 조회합니다.
+   *
+   * @return {@link BudgetDecision.EvaluationType#STATUS}인 조회 전용 결과. 후보 비용이 없으므로
+   * provider 호출 허가의 근거로 사용할 수 없습니다.
    */
   BudgetDecision evaluate(Map<String, String> tags);
 
   /**
-   * 이번 호출로 발생할 예상 비용을 포함하여 예산 초과 여부를 판단합니다. (부수 효과 없음)
+   * 후보 요청의 통화가 포함된 안전 상한 비용을 더해 admission 상태를 판단합니다.
+   * <p>
+   * {@code projectedUsage >= limit}이면 BLOCK입니다. BLOCK과 CURRENCY_MISMATCH도 예외를
+   * 던지지 않고 decision으로 반환합니다.
+   *
+   * @return {@link BudgetDecision.EvaluationType#ADMISSION}인 판단 결과
    */
   BudgetDecision evaluate(
       Map<String, String> tags,
-      Cost cost
+      Cost candidateCost
   );
 }
