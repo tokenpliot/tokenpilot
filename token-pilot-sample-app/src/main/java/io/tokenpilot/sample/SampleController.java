@@ -97,7 +97,8 @@ public class SampleController {
         );
 
         BudgetDecision blockedDecision = evaluator.evaluate(tags, projectedCost);
-        if (blockedDecision.state() == BudgetState.BLOCK) {
+        if (blockedDecision.state() == BudgetState.BLOCK
+                || blockedDecision.state() == BudgetState.CURRENCY_MISMATCH) {
             return Map.of(
                     "enabled", "true",
                     "initialState", initialDecision.state().name(),

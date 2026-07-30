@@ -72,6 +72,7 @@ class DefaultBudgetEvaluatorTest {
     assertThat(result.evaluationType()).isEqualTo(EvaluationType.ADMISSION);
     assertThat(result.committedUsage()).isEqualTo(usd(committed));
     assertThat(result.projectedUsage()).isEqualTo(usd(projected));
+    verify(store, never()).addCost(any(), any(), any());
   }
 
   @ParameterizedTest

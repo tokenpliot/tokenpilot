@@ -72,9 +72,9 @@ Token Pilot의 제품 포지션은 framework-independent Java LLM control and ac
 | Module | Status | Notes |
 | --- | --- | --- |
 | `token-pilot-core` | Basic implementation complete | Domain records, pricing, calculator, registry, ledger manager |
-| `token-pilot-spring-ai` | Basic implementation complete | Spring AI 2.0.0 `UsageExtractor`, `LedgerAdvisor`, response usage recording |
+| `token-pilot-spring-ai` | Basic implementation complete | Spring AI 2.0.0 `UsageExtractor`, `LedgerAdvisor`, response usage recording, and legacy provider-boundary BLOCK enforcement |
 | `token-pilot-micrometer` | Basic implementation complete | `MetricsOptions`, tag whitelist, and metric metadata exist; metric ownership must be narrowed |
-| `token-pilot-budget` | Basic non-atomic implementation | Typed monthly keys, Clock/ZoneId windows, pure status/admission decisions, and legacy BLOCK enforcement implemented; needs candidate estimation, reservation, idempotency, and reconciliation |
+| `token-pilot-budget` | Basic non-atomic implementation | Typed monthly keys, Clock/ZoneId windows, and pure status/admission decisions implemented; needs candidate estimation, reservation, idempotency, and reconciliation |
 | `token-pilot-notification` | Basic implementation complete | Event API and deduplication exist; not yet connected to the full advisor/budget lifecycle |
 | `token-pilot-autoconfigure` | Basic implementation complete | Bean registration, property binding, pricing/budget/notification wiring, and `ChatClientBuilderCustomizer` implemented |
 | `token-pilot-starter` | Basic implementation complete | Thin final user entrypoint that brings runtime modules together |
@@ -328,7 +328,7 @@ The active checklist is in `docs/30_DAY_MVP_REPORT.md`; detailed long-term works
 - Budget money interfaces now use `Cost` while preserving `BudgetKey`, `BudgetPolicy`, Clock/ZoneId monthly windows, and per-key policy snapshots.
 - Until the typed missing-pricing policy lands, `DefaultLedgerManager` preserves the legacy fail-open result as an explicit zero USD `Cost`; do not confuse that compatibility behavior with a priced zero-rate plan.
 - Spring AI usage extraction converts map/JSON-compatible native usage objects into the normalized core model. Real-provider compatibility fixtures remain required because provider and Spring AI usage shapes can change independently.
-- Current legacy budget flow blocks an already-exhausted status before provider invocation, but it remains check-then-add and is not candidate-aware admission or an atomic reservation.
+- The legacy provider boundary blocks an already-exhausted budget decision before provider invocation. Its candidate-free `STATUS` input is a regression guard, not admission evidence; the flow remains check-then-add and is not an atomic reservation.
 - Current Micrometer `ai.token.*` metrics may duplicate Spring AI Observability; preserve compatibility while deciding default suppression or replacement.
 - The verified Spring AI 2.0.0 path is synchronous `ChatClient` usage recording with a fake provider. Streaming cancellation and reconciliation remain outside the current compatibility guarantee.
 - The repository, README, JReleaser configuration, and every published module POM use the MIT License. `verifyPublicationMetadata` guards this release contract and ensures the sample app is not published.
