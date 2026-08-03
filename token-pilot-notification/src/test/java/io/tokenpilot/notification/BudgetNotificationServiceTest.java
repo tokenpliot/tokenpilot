@@ -55,6 +55,7 @@ class BudgetNotificationServiceTest {
   }
 
   @Test
+  @SuppressWarnings("removal")
   void event와_notification_store가_decision의_동일한_key를_사용한다() {
     BudgetNotificationHandler handler = mock(BudgetNotificationHandler.class);
     NotificationStateStore store = mock(NotificationStateStore.class);
@@ -71,6 +72,8 @@ class BudgetNotificationServiceTest {
     assertThat(event.getValue().key()).isSameAs(key);
     assertThat(event.getValue().projectedUsage())
         .isEqualTo(Cost.of(new BigDecimal("50"), Currency.getInstance("USD")));
+    assertThat(event.getValue().currentUsage())
+        .isEqualTo(event.getValue().projectedUsage());
   }
 
   private static BudgetKey key(String window) {

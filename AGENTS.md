@@ -396,6 +396,10 @@ Stage and deploy a Central release:
 
 ## Update History
 
+### 2026-08-04
+
+- Preserved the deprecated `BudgetNotificationEvent.currentUsage()` compatibility accessor through 0.1.x while migrating handlers to `projectedUsage()`; removal is planned for 0.2.0.
+
 ### 2026-07-29
 
 - Separated pure budget decisions from provider-boundary enforcement: evaluator BLOCK and currency mismatch outcomes now return structured decisions.
