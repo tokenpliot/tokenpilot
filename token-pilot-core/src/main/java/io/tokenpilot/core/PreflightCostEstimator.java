@@ -5,21 +5,31 @@ import io.tokenpilot.core.domain.PreflightPricingContext;
 import io.tokenpilot.core.domain.TokenCountResult;
 
 /**
- * 호출 전 REQUEST token 상한을 보수적인 금액 상한으로 변환합니다.
- * 구현은 숫자 비용을 반환하기 전에 token scope, tokenizer compatibility와
- * immutable pricing snapshot을 검증해야 합니다.
+ * 호출 전에 계산한 REQUEST 범위의 토큰 상한을 금액 상한으로 변환하는 Core 계약입니다.
+ *
+ * <p>이 계약은 비용을 계산할 뿐 context window 적합성이나 provider 호출 허가를
+ * 판정하지 않습니다. 호출자는 요청 토큰 결과가 모델의 context admission을 통과했고,
+ * {@link PreflightPricingContext}가 하나의 불변 pricing snapshot에서 파생되었는지
+ * 먼저 보장해야 합니다.</p>
+ *
+ * <p>계산 가능한 경우에도 예약 근거로 사용할 값은
+ * {@link PreflightCostResult.Bounded#safeUpperBoundCost()}뿐입니다.
+ * {@code estimatedCost}는 관찰과 표시를 위한 값입니다.</p>
  */
 public interface PreflightCostEstimator {
 
     /**
-     * atomic reservation이 사용할 호출 전 비용 상한을 계산합니다.
-     * {@link PreflightCostResult.Bounded#safeUpperBoundCost()}만 reservation 근거로 사용하며,
-     * {@code estimatedCost}는 관찰과 표시 목적으로만 사용합니다.
+     * atomic reservation에 사용할 호출 전 비용 상한을 계산합니다.
+     * 입력이 REQUEST 범위가 아니거나 tokenizer 기준이 맞지 않거나 가격 snapshot이
+     * 없으면 숫자 비용 대신 제한된 unavailable 결과를 반환해야 합니다.
      *
-     * @param pricingContext canonical model과 pricing snapshot 조회 기준
-     * @param requestInput REQUEST 전체를 계산한 token 결과
+     * @param pricingContext canonical model, pricing policy, catalog version과
+     *                       검증된 pricing 조건을 담은 계산 문맥
+     * @param requestInput 실제 전송 요청 전체를 계산한 REQUEST 범위의 token 결과
      * @param reservedOutputTokens 호출 전에 확보할 최대 출력 token 수
-     * @return 계산 가능한 비용 상한 또는 제한된 unavailable 사유
+     * @return 계산 가능한 비용 상한 또는 그 사유를 담은 unavailable 결과
+     * @throws NullPointerException 필수 인자가 {@code null}인 경우
+     * @throws IllegalArgumentException reservedOutputTokens가 음수인 경우
      */
     PreflightCostResult estimate(
             PreflightPricingContext pricingContext,

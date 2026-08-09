@@ -27,10 +27,14 @@ public final class LedgerComponents {
     }
 
     /**
-     * 기본 보수적 preflight cost estimator를 생성합니다.
+     * 기본 preflight 비용 상한 계산기를 생성합니다.
      *
-     * @param pricingRegistry immutable pricing snapshot 조회에 사용할 registry
-     * @return 기본 보수적 preflight cost estimator
+     * <p>계산기는 REQUEST 범위의 token 결과와 하나의 불변 pricing snapshot에서
+     * 파생된 문맥을 요구합니다. 이 factory는 context admission이나 atomic reservation을
+     * 대신 수행하지 않습니다.</p>
+     *
+     * @param pricingRegistry pricing snapshot을 조회할 registry
+     * @return 기본 preflight 비용 상한 계산기
      */
     public static PreflightCostEstimator defaultPreflightCostEstimator(PricingRegistry pricingRegistry) {
         return new DefaultPreflightCostEstimator(pricingRegistry);

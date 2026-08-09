@@ -11,19 +11,20 @@ public sealed interface PreflightCostResult
         permits PreflightCostResult.Bounded, PreflightCostResult.Unavailable {
 
     /**
-     * immutable pricing snapshot으로 계산한 유한 비용 상한입니다.
-     * 내부 계산은 반올림하지 않습니다.
+     * 하나의 불변 pricing snapshot으로 계산한 유한 비용 상한입니다.
+     * 내부 계산에서는 반올림하지 않으며, context admission을 통과했다는 의미는 아닙니다.
+     * 예약 계층은 반드시 {@code safeUpperBoundCost}를 사용해야 합니다.
      *
      * @param estimatedCost 관찰과 표시를 위한 예상 비용
-     * @param safeUpperBoundCost reservation에 사용할 보수적 비용 상한
-     * @param inputEstimatedTokens 정보 제공용 input token 계산값
-     * @param inputSafeUpperBoundTokens 보수적인 input token 안전 상한
-     * @param reservedOutputTokens 예약한 최대 output token 수
+     * @param safeUpperBoundCost 예약에 사용할 보수적인 비용 상한
+     * @param inputEstimatedTokens 정보 제공용 입력 token 계산값
+     * @param inputSafeUpperBoundTokens 보수적인 입력 token 안전 상한
+     * @param reservedOutputTokens 예약한 최대 출력 token 수
      * @param canonicalModelId canonical model 식별자
-     * @param pricingPolicyId immutable pricing policy 식별자
+     * @param pricingPolicyId 불변 pricing policy 식별자
      * @param catalogVersion 계산에 사용한 catalog 버전
      * @param estimatorDescriptor token estimator 식별 정보
-     * @param tokenizationBasis 검증된 tokenizer compatibility 기준
+     * @param tokenizationBasis 검증된 tokenizer 호환성 기준
      */
     record Bounded(
             Cost estimatedCost,
@@ -77,15 +78,17 @@ public sealed interface PreflightCostResult
 
     /**
      * fail-closed 경계에서 숫자 비용으로 취급할 수 없는 결과입니다.
+     * 이 결과는 0원이나 임의의 기본 단가를 의미하지 않으며, provider 호출과 예약을
+     * 계속할지 여부는 각 control 계층이 사유를 확인해 결정해야 합니다.
      *
      * @param reason 숫자 비용을 생성하지 못한 제한된 사유
      * @param canonicalModelId canonical model 식별자
      * @param pricingPolicyId 참조한 pricing policy 식별자
      * @param catalogVersion 참조한 catalog 버전
-     * @param currency model이 요구한 비용 통화
-     * @param reservedOutputTokens 요청한 최대 output token 수
+     * @param currency 모델이 요구한 비용 통화
+     * @param reservedOutputTokens 요청한 최대 출력 token 수
      * @param estimatorDescriptor token estimator 식별 정보
-     * @param tokenizationBasis token 결과의 tokenizer compatibility 기준
+     * @param tokenizationBasis token 결과의 tokenizer 호환성 기준
      */
     record Unavailable(
             PreflightCostUnavailableReason reason,

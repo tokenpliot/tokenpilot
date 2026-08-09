@@ -17,8 +17,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * immutable pricing snapshot의 가능한 입력/출력 가격 경로에서 각각 최대 단가를 선택해
- * 같은 token을 중복 합산하지 않고 보수적 비용 상한을 계산합니다.
+ * 불변 pricing snapshot의 배타적인 입력/출력 가격 경로에서 각각 최대 단가를 선택해
+ * 같은 token을 중복 합산하지 않고 보수적인 비용 상한을 계산하는 기본 구현입니다.
+ *
+ * <p>이 구현은 비용만 계산하며 context admission이나 provider 호출을 허가하지 않습니다.
+ * 입력 문맥은 canonical model과 동일한 snapshot에서 파생되어야 하고, 계산 이후에는
+ * registry를 다시 조회하지 않고 같은 snapshot을 예약·정산에 전달해야 합니다.</p>
  */
 class DefaultPreflightCostEstimator implements PreflightCostEstimator {
 
