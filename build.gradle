@@ -657,11 +657,9 @@ package compatibility;
 
 import io.tokenpilot.core.TokenEstimator;
 import io.tokenpilot.core.domain.Cost;
-import io.tokenpilot.core.domain.TokenCountAccuracy;
 import io.tokenpilot.core.domain.TokenCountResult;
 import io.tokenpilot.core.domain.TokenCountScope;
-import io.tokenpilot.core.domain.TokenEstimatorDescriptor;
-import io.tokenpilot.core.domain.TokenizationBasis;
+import io.tokenpilot.core.internal.LedgerComponents;
 import java.math.BigDecimal;
 import java.util.Currency;
 
@@ -675,17 +673,13 @@ public final class CoreConsumer {
             throw new IllegalStateException("Token Pilot core consumer verification failed");
         }
 
-        TokenCountResult expected = TokenCountResult.counted(
-                0L,
-                0L,
-                TokenCountAccuracy.EXACT,
-                TokenCountScope.TEXT_ONLY,
-                new TokenEstimatorDescriptor("consumer-estimator", "1"),
-                new TokenizationBasis("consumer-basis")
-        );
-        TokenEstimator estimator = text -> expected;
-        TokenCountResult actual = estimator.estimate("");
-        if (!actual.isCounted() || !actual.isExact() || actual.tokens().orElseThrow() != 0L) {
+        TokenEstimator estimator = LedgerComponents.utf8ByteHeuristicTokenEstimator();
+        TokenCountResult actual = estimator.estimate("hello");
+        if (!actual.isCounted()
+                || actual.isExact()
+                || actual.tokens().orElseThrow() != 2L
+                || actual.safeUpperBoundTokens().orElseThrow() != 5L
+                || actual.scope() != TokenCountScope.TEXT_ONLY) {
             throw new IllegalStateException("Token Pilot estimator consumer verification failed");
         }
         System.out.println("token-pilot-core Java 25 consumer OK");
