@@ -52,8 +52,9 @@ library behind it.
 
 TokenPilot 0.1.0 is under active development. The current foundation includes
 Spring AI usage integration, model cost calculation, metrics, basic budget
-policy, and Spring Boot autoconfiguration. The MVP is extending this foundation
-with preflight control, atomic budget reservation, and actual usage
+policy, Spring Boot autoconfiguration, and a framework-independent in-memory
+atomic budget reservation/idempotency foundation. The MVP is extending this
+foundation with provider-connected preflight control and actual usage
 reconciliation.
 
 ## Framework-independent core
@@ -107,9 +108,10 @@ Boot, Spring AI, Micrometer, or Reactor dependencies. Spring Boot 3, Spring AI
 are not part of the 0.1.0 support guarantee.
 
 The verified Spring AI path is the synchronous `ChatClient` call lifecycle with
-a fake provider. Streaming cancellation, preflight blocking, atomic budget
-reservation, and estimate/actual reconciliation are still MVP work and are not
-included in this compatibility claim.
+a fake provider. Streaming cancellation, provider-connected preflight
+blocking, reservation lifecycle reconciliation, and estimate/actual
+reconciliation are still MVP work and are not included in this compatibility
+claim.
 
 ## License
 
