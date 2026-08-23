@@ -3,6 +3,7 @@ package io.tokenpilot.autoconfigure;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.tokenpilot.budget.BudgetEvaluator;
 import io.tokenpilot.budget.BudgetStateStore;
+import io.tokenpilot.budget.ReservationAccountingListener;
 import io.tokenpilot.budget.internal.LedgerBudgetComponents;
 import io.tokenpilot.core.CostCalculator;
 import io.tokenpilot.core.LedgerListener;
@@ -13,6 +14,12 @@ import io.tokenpilot.core.PricingRegistry;
 import io.tokenpilot.core.domain.MissingPricingPolicy;
 import io.tokenpilot.core.internal.LedgerComponents;
 import io.tokenpilot.micrometer.internal.LedgerMicrometerComponents;
+import io.tokenpilot.notification.AtomicNotificationStateStore;
+import io.tokenpilot.notification.BudgetNotificationErrorHook;
+import io.tokenpilot.notification.BudgetNotificationHandler;
+import io.tokenpilot.notification.BudgetNotificationService;
+import io.tokenpilot.notification.InMemoryNotificationStateStore;
+import io.tokenpilot.notification.NotificationStateStore;
 import io.tokenpilot.springai.LedgerAdvisor;
 import io.tokenpilot.springai.UsageExtractor;
 import io.tokenpilot.springai.internal.LedgerSpringAiComponents;
@@ -25,10 +32,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import io.tokenpilot.notification.BudgetNotificationHandler;
-import io.tokenpilot.notification.BudgetNotificationService;
-import io.tokenpilot.notification.InMemoryNotificationStateStore;
-import io.tokenpilot.notification.NotificationStateStore;
 
 import java.time.Clock;
 
@@ -176,8 +179,12 @@ public class TokenPilotAutoConfiguration {
     @ConditionalOnMissingBean
     @ConditionalOnClass(LedgerBudgetComponents.class)
     @ConditionalOnProperty(prefix = "token-pilot.budget", name = "enabled", havingValue = "true")
-    public BudgetStateStore budgetStateStore() {
-        return LedgerBudgetComponents.inMemoryBudgetStateStore();
+    public BudgetStateStore budgetStateStore(
+        ObjectProvider<ReservationAccountingListener> accountingListeners
+    ) {
+        return LedgerBudgetComponents.inMemoryBudgetStateStore(
+            accountingListeners.orderedStream().toList()
+        );
     }
 
     /**
@@ -205,9 +212,9 @@ public class TokenPilotAutoConfiguration {
      * - token-pilot.notification.enabled=true 일 때만 등록
      */
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(NotificationStateStore.class)
     @ConditionalOnProperty(prefix = "token-pilot.notification", name = "enabled", havingValue = "true")
-    public NotificationStateStore notificationStateStore() {
+    public AtomicNotificationStateStore notificationStateStore() {
         return new InMemoryNotificationStateStore();
     }
 
@@ -222,9 +229,21 @@ public class TokenPilotAutoConfiguration {
     @ConditionalOnBean(BudgetNotificationHandler.class)
     @ConditionalOnProperty(prefix = "token-pilot.notification", name = "enabled", havingValue = "true")
     public BudgetNotificationService budgetNotificationService(
-        BudgetNotificationHandler handler,
-        NotificationStateStore notificationStateStore
+        ObjectProvider<BudgetNotificationHandler> handlers,
+        AtomicNotificationStateStore notificationStateStore,
+        ObjectProvider<BudgetStateStore> budgetStateStore,
+        TokenPilotProperties properties,
+        ObjectProvider<BudgetNotificationErrorHook> errorHook
     ) {
-        return new BudgetNotificationService(handler, notificationStateStore);
+        var policy = properties.toBudgetPolicy();
+        return new BudgetNotificationService(
+            handlers.orderedStream().toList(),
+            notificationStateStore,
+            key -> budgetStateStore.getObject().snapshot(
+                key,
+                policy.monthlyLimit()
+            ),
+            errorHook.getIfAvailable(BudgetNotificationErrorHook::noOp)
+        );
     }
 }

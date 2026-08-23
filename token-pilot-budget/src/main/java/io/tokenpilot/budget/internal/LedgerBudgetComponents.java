@@ -7,6 +7,7 @@ import io.tokenpilot.budget.ReservationAccounting;
 import io.tokenpilot.budget.ReservationAccountingListener;
 import io.tokenpilot.budget.ReservationId;
 import io.tokenpilot.core.CostCalculator;
+import io.tokenpilot.core.internal.LedgerComponents;
 
 import java.time.Clock;
 import java.util.List;
@@ -23,6 +24,17 @@ public final class LedgerBudgetComponents {
 
     public static BudgetStateStore inMemoryBudgetStateStore() {
         return new InMemoryBudgetStateStore();
+    }
+
+    public static BudgetStateStore inMemoryBudgetStateStore(
+        List<ReservationAccountingListener> accountingListeners
+    ) {
+        return new InMemoryBudgetStateStore(
+            Clock.systemUTC(),
+            ReservationId::random,
+            LedgerComponents.defaultCostCalculator(),
+            accountingListeners
+        );
     }
 
     public static BudgetStateStore inMemoryBudgetStateStore(

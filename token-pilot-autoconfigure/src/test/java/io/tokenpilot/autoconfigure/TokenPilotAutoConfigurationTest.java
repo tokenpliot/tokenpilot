@@ -5,10 +5,13 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.tokenpilot.budget.BudgetDecision;
 import io.tokenpilot.budget.BudgetEvaluator;
 import io.tokenpilot.budget.BudgetKey;
+import io.tokenpilot.budget.BudgetReservationResult;
 import io.tokenpilot.budget.BudgetState;
 import io.tokenpilot.budget.BudgetStateStore;
 import io.tokenpilot.budget.BudgetThreshold;
 import io.tokenpilot.budget.BudgetWindow;
+import io.tokenpilot.budget.ReservationAccountingListener;
+import io.tokenpilot.budget.ReservationStatus;
 import io.tokenpilot.core.CostCalculator;
 import io.tokenpilot.core.LedgerManager;
 import io.tokenpilot.core.PricingEvaluator;
@@ -22,8 +25,11 @@ import io.tokenpilot.core.domain.PricingSnapshot;
 import io.tokenpilot.core.domain.TokenType;
 import io.tokenpilot.core.domain.TokenUsage;
 import io.tokenpilot.core.exception.MissingPricingException;
+import io.tokenpilot.notification.AtomicNotificationStateStore;
 import io.tokenpilot.notification.BudgetNotificationHandler;
+import io.tokenpilot.notification.BudgetNotificationEvent;
 import io.tokenpilot.notification.BudgetNotificationService;
+import io.tokenpilot.notification.BudgetNotificationSource;
 import io.tokenpilot.notification.NotificationStateStore;
 import io.tokenpilot.springai.LedgerAdvisor;
 import io.tokenpilot.springai.UsageExtractor;
@@ -47,8 +53,10 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Currency;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Stream;
 
 import static io.tokenpilot.core.domain.TokenType.COMPLETION;
@@ -428,9 +436,70 @@ class TokenPilotAutoConfigurationTest {
             .withPropertyValues("token-pilot.notification.enabled=true")
             .run(context -> {
                 assertThat(context).hasSingleBean(NotificationStateStore.class);
+                assertThat(context).hasSingleBean(AtomicNotificationStateStore.class);
                 assertThat(context).hasSingleBean(BudgetNotificationService.class);
+                assertThat(context).hasSingleBean(ReservationAccountingListener.class);
+                assertThat(context.getBean(ReservationAccountingListener.class))
+                    .isSameAs(context.getBean(BudgetNotificationService.class));
                 assertThat(context.getBean(TokenPilotProperties.class).getNotification().isEnabled())
                     .isTrue();
+            });
+    }
+
+    @Test
+    @DisplayName("legacy custom notification store는 atomic lifecycle을 조용히 무시하지 않아야 한다")
+    void shouldFailFastForLegacyCustomNotificationStore() {
+        this.contextRunner
+            .withUserConfiguration(
+                FakeBudgetNotificationHandlerConfiguration.class,
+                LegacyNotificationStateStoreConfiguration.class
+            )
+            .withPropertyValues("token-pilot.notification.enabled=true")
+            .run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(context.getStartupFailure())
+                    .hasMessageContaining("AtomicNotificationStateStore");
+            });
+    }
+
+    @Test
+    @DisplayName("원자적 budget BLOCK 결과가 자동 설정된 notification handler에 전달되어야 한다")
+    void shouldConnectAtomicBudgetBlockToNotificationHandler() {
+        this.contextRunner
+            .withUserConfiguration(FakeBudgetNotificationHandlerConfiguration.class)
+            .withPropertyValues(
+                "token-pilot.budget.enabled=true",
+                "token-pilot.notification.enabled=true"
+            )
+            .run(context -> {
+                BudgetStateStore stateStore = context.getBean(BudgetStateStore.class);
+                TokenPilotProperties properties = context.getBean(TokenPilotProperties.class);
+                Cost limit = properties.toBudgetPolicy().monthlyLimit();
+                BudgetKey key = new BudgetKey(
+                    "budget-policy",
+                    "tenant",
+                    "tenant-a",
+                    BudgetWindow.parse("2026-08")
+                );
+                RecordingBudgetNotificationHandler handler =
+                    (RecordingBudgetNotificationHandler) context.getBean(
+                        BudgetNotificationHandler.class
+                    );
+
+                BudgetReservationResult result = stateStore.checkAndReserve(
+                    key,
+                    limit,
+                    limit,
+                    "request-1"
+                );
+
+                assertThat(result.status()).isEqualTo(ReservationStatus.BLOCKED);
+                assertThat(handler.events())
+                    .extracting(BudgetNotificationEvent::threshold)
+                    .containsExactly(BudgetThreshold.EXCEEDED);
+                assertThat(handler.events())
+                    .extracting(BudgetNotificationEvent::source)
+                    .containsExactly(BudgetNotificationSource.RESERVATION_BLOCK);
             });
     }
 
@@ -565,7 +634,46 @@ class TokenPilotAutoConfigurationTest {
     static class FakeBudgetNotificationHandlerConfiguration {
         @Bean
         public BudgetNotificationHandler budgetNotificationHandler() {
-            return event -> {};
+            return new RecordingBudgetNotificationHandler();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class LegacyNotificationStateStoreConfiguration {
+        @Bean
+        public NotificationStateStore legacyNotificationStateStore() {
+            return new NotificationStateStore() {
+                private BudgetThreshold threshold = BudgetThreshold.NONE;
+
+                @Override
+                public BudgetThreshold getLastNotifiedThreshold(BudgetKey key) {
+                    return threshold;
+                }
+
+                @Override
+                public void updateLastNotifiedThreshold(
+                    BudgetKey key,
+                    BudgetThreshold threshold
+                ) {
+                    this.threshold = threshold;
+                }
+            };
+        }
+    }
+
+    static class RecordingBudgetNotificationHandler
+            implements BudgetNotificationHandler {
+
+        private final List<BudgetNotificationEvent> events =
+            new CopyOnWriteArrayList<>();
+
+        @Override
+        public void handle(BudgetNotificationEvent event) {
+            events.add(event);
+        }
+
+        List<BudgetNotificationEvent> events() {
+            return List.copyOf(events);
         }
     }
 }

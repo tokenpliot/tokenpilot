@@ -50,6 +50,7 @@ Never describe a roadmap item as an implemented or published capability.
 - `token-pilot-notification`은 알림 이벤트 발행과 중복 방지 로직만 담당한다.
 - 실제 메일/Slack/Webhook 전송은 사용자 애플리케이션의 `BudgetNotificationHandler` 구현체가 담당한다.
 - 라이브러리 내부에서 SMTP 설정이나 외부 메일 서비스를 기본 흐름으로 포함하지 않는다.
+- 알림 전달은 process-local best-effort이며 durable outbox나 재시작 후 replay를 제공하지 않는다.
 
 ## Architecture Decision: Framework Independence and Observability
 
@@ -75,7 +76,7 @@ Token Pilot의 제품 포지션은 framework-independent Java LLM control and ac
 | `token-pilot-spring-ai` | Basic implementation complete | Spring AI 2.0.0 `UsageExtractor`, `LedgerAdvisor`, pricing snapshot resolution, response usage recording, reconciliation decisions, and legacy provider-boundary BLOCK enforcement |
 | `token-pilot-micrometer` | Basic implementation complete | `MetricsOptions`, tag whitelist, and metric metadata exist; metric ownership must be narrowed |
 | `token-pilot-budget` | Atomic reservation and reconciliation implemented | Typed monthly keys, Clock/ZoneId windows, safe-upper-bound reservations, commit/release/write-off lifecycle, pending reconciliation liability, estimate/actual token and cost deltas, duplicate callback protection, and framework-independent best-effort accounting events implemented; candidate production and durable stores remain |
-| `token-pilot-notification` | Basic implementation complete | Event API and deduplication exist; not yet connected to the full advisor/budget lifecycle |
+| `token-pilot-notification` | Atomic accounting integration implemented | Commit, reconciliation-required, late reconciliation, and reservation BLOCK results produce process-local deduplicated threshold events with isolated handlers and a sanitized error hook; durable delivery remains |
 | `token-pilot-autoconfigure` | Basic implementation complete | Bean registration, property binding, pricing/budget/notification wiring, and `ChatClientBuilderCustomizer` implemented |
 | `token-pilot-starter` | Basic implementation complete | Thin final user entrypoint that brings runtime modules together |
 | `token-pilot-sample-app` | Basic E2E complete | Direct ledger metrics, budget, and fake Spring AI advisor E2E implemented |
@@ -216,6 +217,7 @@ Autoconfigure tests should use `ApplicationContextRunner` and verify:
 - Spring AI classpath registers `UsageExtractor`, `LedgerAdvisor`, and `ChatClientBuilderCustomizer`
 - notification beans do not register by default
 - notification beans register when notification is enabled and `BudgetNotificationHandler` bean exists
+- the default budget store receives the notification service as an accounting listener
 
 ## Notification Contract
 
@@ -233,9 +235,13 @@ class MailBudgetNotificationHandler implements BudgetNotificationHandler {
 
 - `BudgetNotificationHandler` 빈이 없으면 `BudgetNotificationService`는 등록되지 않는다 (no-op).
 - `token-pilot.notification.enabled=true` 설정 시에만 notification 빈이 등록된다.
-- 알림 중복 방지는 evaluator가 확정한 `BudgetKey(policyId, targetType, targetId, window)`로 처리된다.
-- 같은 window 안에서는 낮거나 같은 threshold 재발송이 방지된다.
+- 알림은 legacy evaluator 호출이 아니라 적용된 commit/reconciliation-required/late reconciliation과 원자적 reservation BLOCK 결과를 소비한다.
+- 알림 중복 방지는 `BudgetKey(policyId, targetType, targetId, window) + BudgetThreshold`로 처리된다.
+- 같은 window 안에서는 낮거나 같은 threshold 재발송이 방지되고 duplicate accounting callback은 같은 reservation ID로 다시 누적되지 않는다.
 - 새 window에서는 50/80/100% 알림이 다시 가능하다.
+- dedup 상태는 in-memory store 인스턴스 생명주기 동안 보존되며 TTL, 재시작 후 replay, exactly-once delivery를 제공하지 않는다.
+- handler 실패는 다음 handler, 회계 결과, provider 응답을 바꾸지 않으며 bounded/sanitized `BudgetNotificationErrorHook`으로만 관찰한다.
+- custom notification store는 atomic lifecycle을 위해 `AtomicNotificationStateStore`를 구현해야 하며, legacy `NotificationStateStore`만 등록하면 자동 설정이 명확히 실패한다.
 
 ## Recommended Configuration Shape
 
@@ -401,6 +407,11 @@ Stage and deploy a Central release:
 ```
 
 ## Update History
+
+### 2026-08-24
+
+- Connected budget notifications to applied commit, reconciliation-required, late reconciliation, and atomic reservation BLOCK results instead of legacy evaluator calls.
+- Added process-local atomic threshold deduplication, multi-handler failure isolation, sanitized error observation, and Spring Boot listener wiring.
 
 ### 2026-08-22
 

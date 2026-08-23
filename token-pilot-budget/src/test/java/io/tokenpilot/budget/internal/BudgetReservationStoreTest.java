@@ -1,12 +1,15 @@
 package io.tokenpilot.budget.internal;
 
+import io.tokenpilot.budget.AccountingTransitionStatus;
 import io.tokenpilot.budget.BudgetKey;
 import io.tokenpilot.budget.BudgetReservationRequest;
 import io.tokenpilot.budget.BudgetReservationResult;
 import io.tokenpilot.budget.BudgetSnapshot;
 import io.tokenpilot.budget.BudgetWindow;
 import io.tokenpilot.budget.IdempotencyKey;
+import io.tokenpilot.budget.ReservationAccountingListener;
 import io.tokenpilot.budget.ReservationId;
+import io.tokenpilot.budget.ReservationReconciliationRequiredEvent;
 import io.tokenpilot.budget.ReservationStatus;
 import io.tokenpilot.budget.ReservationState;
 import io.tokenpilot.core.domain.Cost;
@@ -19,6 +22,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Currency;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -27,6 +31,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -105,6 +110,135 @@ class BudgetReservationStoreTest {
         assertThat(result.snapshot().effectiveUsage()).isEqualTo(Cost.zero(USD));
         assertThat(result.snapshot().activeReservationIds()).isEmpty();
         assertThat(store.snapshot(KEY, LIMIT).effectiveUsage()).isEqualTo(Cost.zero(USD));
+    }
+
+    @Test
+    void BLOCK_listener_실패는_결과를_바꾸지_않고_다음_listener를_막지_않는다() {
+        AtomicInteger failedDeliveries = new AtomicInteger();
+        AtomicInteger successfulDeliveries = new AtomicInteger();
+        AtomicInteger sequence = new AtomicInteger();
+        ReservationAccountingListener failingListener = new ReservationAccountingListener() {
+            @Override
+            public void onCommitted(io.tokenpilot.budget.ReservationAccountingEvent event) {
+            }
+
+            @Override
+            public void onReservationBlocked(
+                    BudgetReservationRequest request,
+                    BudgetReservationResult result
+            ) {
+                failedDeliveries.incrementAndGet();
+                throw new IllegalStateException("listener failed");
+            }
+        };
+        ReservationAccountingListener successfulListener =
+                new ReservationAccountingListener() {
+                    @Override
+                    public void onCommitted(
+                            io.tokenpilot.budget.ReservationAccountingEvent event
+                    ) {
+                    }
+
+                    @Override
+                    public void onReservationBlocked(
+                            BudgetReservationRequest request,
+                            BudgetReservationResult result
+                    ) {
+                        successfulDeliveries.incrementAndGet();
+                    }
+                };
+        InMemoryBudgetStateStore store = new InMemoryBudgetStateStore(
+                CLOCK,
+                () -> new ReservationId(
+                        "reservation-" + sequence.incrementAndGet()
+                ),
+                (usage, pricing) -> Cost.zero(USD),
+                List.of(failingListener, successfulListener)
+        );
+
+        BudgetReservationResult result = store.checkAndReserve(
+                KEY,
+                LIMIT,
+                LIMIT,
+                "request-1"
+        );
+
+        assertThat(result.status()).isEqualTo(ReservationStatus.BLOCKED);
+        assertThat(failedDeliveries).hasValue(1);
+        assertThat(successfulDeliveries).hasValue(1);
+        assertThat(store.snapshot(KEY, LIMIT).effectiveUsage())
+                .isEqualTo(Cost.zero(USD));
+    }
+
+    @Test
+    void 정산대기_listener_실패는_pending_상태를_바꾸지_않고_중복_발행하지_않는다() {
+        AtomicInteger failedDeliveries = new AtomicInteger();
+        AtomicInteger successfulDeliveries = new AtomicInteger();
+        AtomicInteger sequence = new AtomicInteger();
+        AtomicReference<ReservationReconciliationRequiredEvent> delivered =
+                new AtomicReference<>();
+        ReservationAccountingListener failingListener =
+                new ReservationAccountingListener() {
+                    @Override
+                    public void onCommitted(
+                            io.tokenpilot.budget.ReservationAccountingEvent event
+                    ) {
+                    }
+
+                    @Override
+                    public void onReconciliationRequired(
+                            ReservationReconciliationRequiredEvent event
+                    ) {
+                        failedDeliveries.incrementAndGet();
+                        throw new IllegalStateException("listener failed");
+                    }
+                };
+        ReservationAccountingListener successfulListener =
+                new ReservationAccountingListener() {
+                    @Override
+                    public void onCommitted(
+                            io.tokenpilot.budget.ReservationAccountingEvent event
+                    ) {
+                    }
+
+                    @Override
+                    public void onReconciliationRequired(
+                            ReservationReconciliationRequiredEvent event
+                    ) {
+                        successfulDeliveries.incrementAndGet();
+                        delivered.set(event);
+                    }
+                };
+        InMemoryBudgetStateStore store = new InMemoryBudgetStateStore(
+                CLOCK,
+                () -> new ReservationId(
+                        "reservation-" + sequence.incrementAndGet()
+                ),
+                (usage, pricing) -> Cost.zero(USD),
+                List.of(failingListener, successfulListener)
+        );
+        BudgetReservationResult reserved = store.checkAndReserve(
+                KEY,
+                LIMIT,
+                usd("60.00"),
+                "request-1"
+        );
+        store.markInFlight(reserved.reservationId());
+
+        var applied = store.markReconciliationRequired(reserved.reservationId());
+        var duplicate = store.markReconciliationRequired(reserved.reservationId());
+
+        assertThat(applied.status()).isEqualTo(AccountingTransitionStatus.APPLIED);
+        assertThat(duplicate.status()).isEqualTo(AccountingTransitionStatus.REUSED);
+        assertThat(failedDeliveries).hasValue(1);
+        assertThat(successfulDeliveries).hasValue(1);
+        assertThat(delivered.get().snapshot().pendingReconciliationLiability())
+                .isEqualTo(usd("60.00"));
+        BudgetSnapshot snapshot = store.snapshot(KEY, LIMIT);
+        assertThat(snapshot.activeReservedCost()).isEqualTo(Cost.zero(USD));
+        assertThat(snapshot.pendingReconciliationLiability())
+                .isEqualTo(usd("60.00"));
+        assertThat(snapshot.effectiveUsage()).isEqualTo(usd("60.00"));
     }
 
     @Test

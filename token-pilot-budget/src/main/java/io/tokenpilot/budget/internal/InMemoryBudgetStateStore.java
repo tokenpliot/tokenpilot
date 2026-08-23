@@ -16,8 +16,10 @@ import io.tokenpilot.budget.ReservationAccountingReason;
 import io.tokenpilot.budget.ReservationActualTokens;
 import io.tokenpilot.budget.ReservationId;
 import io.tokenpilot.budget.ReservationReconciliation;
+import io.tokenpilot.budget.ReservationReconciliationRequiredEvent;
 import io.tokenpilot.budget.ReservationState;
 import io.tokenpilot.budget.ReservationStateMachine;
+import io.tokenpilot.budget.ReservationStatus;
 import io.tokenpilot.budget.ReservationTransition;
 import io.tokenpilot.budget.ReservationTokenEstimate;
 import io.tokenpilot.core.CostCalculator;
@@ -145,7 +147,12 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
                 )
         );
 
-        return Objects.requireNonNull(result.get(), "reservation result must be set");
+        BudgetReservationResult reservationResult = Objects.requireNonNull(
+                result.get(),
+                "reservation result must be set"
+        );
+        publishBlockedReservation(request, reservationResult);
+        return reservationResult;
     }
 
     @Override
@@ -260,13 +267,14 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
     ) {
         requireReconciliationRequiredReason(reason);
         Bucket bucket = bucketFor(reservationId);
+        ReservationTransition transition;
+        ReservationReconciliationRequiredEvent event;
         synchronized (bucket) {
             ReservationAccountingState accountingState = accountingState(
                     bucket,
                     reservationId
             );
-            ReservationTransition transition =
-                    accountingState.evaluateReconciliationRequired();
+            transition = accountingState.evaluateReconciliationRequired();
             if (!transition.status().isApplied()) {
                 return transition;
             }
@@ -276,8 +284,16 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
                     accountingState,
                     transition.resultingState()
             );
-            return transition;
+            event = new ReservationReconciliationRequiredEvent(
+                    reservationId,
+                    accountingState.reservation().key(),
+                    transition,
+                    reason,
+                    bucket.snapshot(accountingState.reservation().key())
+            );
         }
+        publishReconciliationRequired(event);
+        return transition;
     }
 
     @Override
@@ -425,6 +441,7 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
         Objects.requireNonNull(reason, "reason must not be null");
         Bucket bucket = bucketFor(command.reservationId());
         ReservationReconciliation reconciliation;
+        BudgetSnapshot accountingSnapshot;
         synchronized (bucket) {
             reconciliation = reconcileUsageInBucket(
                     bucket,
@@ -432,13 +449,15 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
                     type,
                     reason
             );
+            accountingSnapshot = bucket.snapshot(reconciliation.budgetKey());
         }
-        publishAccountingEvent(reconciliation);
+        publishAccountingEvent(reconciliation, accountingSnapshot);
         return reconciliation;
     }
 
     private void publishAccountingEvent(
-            ReservationReconciliation reconciliation
+            ReservationReconciliation reconciliation,
+            BudgetSnapshot accountingSnapshot
     ) {
         if (!reconciliation.transition().status().isApplied()
                 || accountingListeners.isEmpty()) {
@@ -448,18 +467,48 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
                 reconciliation
         );
         for (ReservationAccountingListener listener : accountingListeners) {
-            notifyBestEffort(listener, event);
+            notifyBestEffort(listener, event, accountingSnapshot);
         }
     }
 
     private static void notifyBestEffort(
             ReservationAccountingListener listener,
-            ReservationAccountingEvent event
+            ReservationAccountingEvent event,
+            BudgetSnapshot accountingSnapshot
     ) {
         try {
-            listener.onCommitted(event);
+            listener.onAccountingApplied(event, accountingSnapshot);
         } catch (RuntimeException ignored) {
             // Listener 실패는 이미 적용된 회계 상태를 되돌리지 않습니다.
+        }
+    }
+
+    private void publishBlockedReservation(
+            BudgetReservationRequest request,
+            BudgetReservationResult result
+    ) {
+        if (result.status() != ReservationStatus.BLOCKED
+                || accountingListeners.isEmpty()) {
+            return;
+        }
+        for (ReservationAccountingListener listener : accountingListeners) {
+            try {
+                listener.onReservationBlocked(request, result);
+            } catch (RuntimeException ignored) {
+                // Listener 실패는 원자적으로 확정된 admission 결과를 바꾸지 않습니다.
+            }
+        }
+    }
+
+    private void publishReconciliationRequired(
+            ReservationReconciliationRequiredEvent event
+    ) {
+        for (ReservationAccountingListener listener : accountingListeners) {
+            try {
+                listener.onReconciliationRequired(event);
+            } catch (RuntimeException ignored) {
+                // Listener 실패는 이미 적용된 pending liability를 되돌리지 않습니다.
+            }
         }
     }
 
