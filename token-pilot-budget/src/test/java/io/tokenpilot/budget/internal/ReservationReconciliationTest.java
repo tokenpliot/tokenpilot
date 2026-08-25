@@ -12,6 +12,7 @@ import io.tokenpilot.budget.ReservationAccountingEvent;
 import io.tokenpilot.budget.ReservationAccountingReason;
 import io.tokenpilot.budget.ReservationActualTokens;
 import io.tokenpilot.budget.ReservationReconciliation;
+import io.tokenpilot.budget.ReservationReconciliationRequiredEvent;
 import io.tokenpilot.budget.ReservationStatus;
 import io.tokenpilot.budget.ReservationTokenEstimate;
 import io.tokenpilot.core.CostCalculator;
@@ -22,6 +23,7 @@ import io.tokenpilot.core.domain.TokenType;
 import io.tokenpilot.core.domain.TokenUsage;
 import io.tokenpilot.core.domain.TokenUsageDetails;
 import io.tokenpilot.core.domain.UsageSource;
+import io.tokenpilot.core.internal.LedgerComponents;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -85,7 +87,7 @@ class ReservationReconciliationTest {
                         "attempt-1",
                         reservationId,
                         TokenUsage.from(100, 50),
-                        "gpt-4o-mini-response"
+                        "gpt-4o-mini-request"
                 )
         );
 
@@ -220,7 +222,7 @@ class ReservationReconciliationTest {
         assertThat(reconciliation.budgetKey()).isEqualTo(KEY);
         assertThat(reconciliation.requestModelId()).isEqualTo(snapshot.modelId());
         assertThat(reconciliation.responseModelId())
-                .isEqualTo("gpt-4o-mini-response");
+                .isEqualTo("gpt-4o-mini-request");
         assertThat(reconciliation.pricingPolicyId())
                 .isEqualTo(snapshot.pricingPolicyId());
         assertThat(reconciliation.catalogVersion())
@@ -370,7 +372,7 @@ class ReservationReconciliationTest {
                                 "attempt-1",
                                 reservationId,
                                 TokenUsage.from(100, 50),
-                                "gpt-4o-mini-response"
+                                "gpt-4o-mini-request"
                         )
                 )
         ).isInstanceOf(IllegalArgumentException.class)
@@ -378,6 +380,223 @@ class ReservationReconciliationTest {
 
         assertThat(calculationCount).hasValue(0);
         assertThat(store.snapshot(KEY, LIMIT)).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("다른 response model은 예약 가격으로 계산하기 전에 거부한다")
+    void rejectsMismatchedResponseModelBeforeCostCalculation() {
+        AtomicInteger calculationCount = new AtomicInteger();
+        InMemoryBudgetStateStore store = store((usage, plan) -> {
+            calculationCount.incrementAndGet();
+            return usd("40.00");
+        });
+        ReservationId reservationId = reserve(
+                store,
+                pricingSnapshot(),
+                usd("60.00")
+        );
+        store.markInFlight(reservationId);
+        var before = store.snapshot(KEY, LIMIT);
+
+        assertThatThrownBy(() -> store.commit(new ActualUsageCommand(
+                "request-1",
+                "attempt-1",
+                reservationId,
+                TokenUsage.from(100, 50),
+                "provider-routed-model"
+        ))).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(
+                        "responseModelId must match the reservation pricing snapshot"
+                );
+
+        assertThat(calculationCount).hasValue(0);
+        assertThat(store.snapshot(KEY, LIMIT)).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("pricing mismatch pending은 같은 잘못된 모델의 late actual로 확정하지 않는다")
+    void rejectsLateActualThatStillMismatchesReservedPricing() {
+        AtomicInteger calculationCount = new AtomicInteger();
+        InMemoryBudgetStateStore store = store((usage, plan) -> {
+            calculationCount.incrementAndGet();
+            return usd("40.00");
+        });
+        ReservationId reservationId = reserve(
+                store,
+                pricingSnapshot(),
+                usd("60.00")
+        );
+        store.markInFlight(reservationId);
+        store.markReconciliationRequired(
+                reservationId,
+                ReservationAccountingReason.PRICING_RECONCILIATION_REQUIRED
+        );
+        var before = store.snapshot(KEY, LIMIT);
+
+        assertThatThrownBy(() -> store.reconcileLateActual(
+                new ActualUsageCommand(
+                        "request-1",
+                        "attempt-1",
+                        reservationId,
+                        TokenUsage.from(100, 50),
+                        "provider-routed-model"
+                )
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(
+                        "responseModelId must match the reservation pricing snapshot"
+                );
+
+        assertThat(calculationCount).hasValue(0);
+        assertThat(store.snapshot(KEY, LIMIT)).isEqualTo(before);
+        assertThat(before.pendingReconciliationLiability())
+                .isEqualTo(usd("60.00"));
+    }
+
+    @Test
+    @DisplayName("response model pricing snapshot으로 pending actual을 한 번만 재정산한다")
+    void reconcilesPendingActualWithExplicitResponsePricingSnapshot() {
+        AtomicInteger calculationCount = new AtomicInteger();
+        List<ReservationAccountingEvent> events = new ArrayList<>();
+        InMemoryBudgetStateStore store = new InMemoryBudgetStateStore(
+                CLOCK,
+                () -> new ReservationId("reservation-repriced"),
+                (usage, plan) -> {
+                    calculationCount.incrementAndGet();
+                    assertThat(plan.modelId()).isEqualTo("provider-routed-model");
+                    return usd("25.00");
+                },
+                List.of(events::add)
+        );
+        PricingSnapshot requestSnapshot = pricingSnapshot();
+        PricingSnapshot responseSnapshot = new PricingSnapshot(
+                "provider-routed-model",
+                "provider-policy",
+                "catalog-v2",
+                CLOCK.instant().plusSeconds(1),
+                Map.of(
+                        TokenType.PROMPT, new BigDecimal("0.20"),
+                        TokenType.COMPLETION, new BigDecimal("0.40")
+                ),
+                USD
+        );
+        ReservationId reservationId = reserve(store, requestSnapshot, usd("60.00"));
+        store.markInFlight(reservationId);
+        ActualUsageCommand command = new ActualUsageCommand(
+                "request-1",
+                "attempt-1",
+                reservationId,
+                TokenUsage.from(100, 50),
+                "provider-routed-model"
+        );
+        store.markReconciliationRequired(
+                command,
+                ReservationAccountingReason.PRICING_RECONCILIATION_REQUIRED
+        );
+        var pendingBeforeInvalidCallback = store.snapshot(KEY, LIMIT);
+        ActualUsageCommand conflictingCommand = new ActualUsageCommand(
+                "request-1",
+                "attempt-1",
+                reservationId,
+                TokenUsage.from(101, 50),
+                "provider-routed-model"
+        );
+        assertThatThrownBy(() -> store.reconcileLateActual(
+                conflictingCommand,
+                responseSnapshot
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(
+                        "actual usage callback conflicts with the pending pricing callback"
+                );
+        assertThat(store.snapshot(KEY, LIMIT)).isEqualTo(pendingBeforeInvalidCallback);
+
+        assertThatThrownBy(() -> store.reconcileLateActual(
+                command,
+                new PricingSnapshot(
+                        "wrong-model",
+                        "provider-policy",
+                        "catalog-v2",
+                        CLOCK.instant(),
+                        responseSnapshot.rates(),
+                        USD
+                )
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("responseModelId must match the actual pricing snapshot");
+        assertThat(store.snapshot(KEY, LIMIT)).isEqualTo(pendingBeforeInvalidCallback);
+
+        ReservationReconciliation applied = store.reconcileLateActual(
+                command,
+                responseSnapshot
+        );
+        ReservationReconciliation duplicate = store.reconcileLateActual(
+                command,
+                new PricingSnapshot(
+                        "provider-routed-model",
+                        "provider-policy",
+                        "catalog-v2",
+                        CLOCK.instant().plusSeconds(2),
+                        responseSnapshot.rates(),
+                        USD
+                )
+        );
+
+        assertThat(calculationCount).hasValue(1);
+        assertThat(applied.transition().status()).isEqualTo(
+                io.tokenpilot.budget.AccountingTransitionStatus.APPLIED
+        );
+        assertThat(duplicate.transition().status()).isEqualTo(REUSED);
+        assertThat(applied.pricingSnapshot()).isEqualTo(requestSnapshot);
+        assertThat(applied.actualPricingSnapshot()).isEqualTo(responseSnapshot);
+        assertThat(applied.requestModelId()).isEqualTo(requestSnapshot.modelId());
+        assertThat(applied.responseModelId()).isEqualTo(responseSnapshot.modelId());
+        assertThat(applied.actual()).isEqualTo(usd("25.00"));
+        assertThat(events).containsExactly(new ReservationAccountingEvent(applied));
+        assertThat(store.snapshot(KEY, LIMIT).pendingReconciliationLiability())
+                .isEqualTo(usd("0.00"));
+        assertThat(store.snapshot(KEY, LIMIT).committedCost())
+                .isEqualTo(usd("25.00"));
+    }
+
+    @Test
+    @DisplayName("pricing mismatch event는 provider actual과 response model을 보존한다")
+    void preservesPendingActualInPricingReconciliationEvent() {
+        List<ReservationReconciliationRequiredEvent> events = new ArrayList<>();
+        InMemoryBudgetStateStore store = new InMemoryBudgetStateStore(
+                CLOCK,
+                () -> new ReservationId("reservation-pending-pricing"),
+                LedgerComponents.defaultCostCalculator(),
+                List.of(new io.tokenpilot.budget.ReservationAccountingListener() {
+                    @Override
+                    public void onCommitted(ReservationAccountingEvent event) {
+                    }
+
+                    @Override
+                    public void onReconciliationRequired(
+                            ReservationReconciliationRequiredEvent event
+                    ) {
+                        events.add(event);
+                    }
+                })
+        );
+        ReservationId reservationId = reserve(store, pricingSnapshot(), usd("60.00"));
+        store.markInFlight(reservationId);
+        ActualUsageCommand command = new ActualUsageCommand(
+                "request-1",
+                "attempt-1",
+                reservationId,
+                TokenUsage.from(100, 50),
+                "provider-routed-model"
+        );
+
+        store.markReconciliationRequired(
+                command,
+                ReservationAccountingReason.PRICING_RECONCILIATION_REQUIRED
+        );
+
+        assertThat(events).hasSize(1);
+        assertThat(events.getFirst().pendingActualUsage()).contains(command);
+        assertThat(events.getFirst().reason()).isEqualTo(
+                ReservationAccountingReason.PRICING_RECONCILIATION_REQUIRED
+        );
     }
 
     @Test
@@ -411,7 +630,7 @@ class ReservationReconciliationTest {
                         "attempt-1",
                         new ReservationId("reservation-1"),
                         TokenUsage.unavailable(Map.of()),
-                        "gpt-4o-mini-response"
+                        "gpt-4o-mini-request"
                 )
         ).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("usage must be available for actual reconciliation");
@@ -439,7 +658,7 @@ class ReservationReconciliationTest {
                         "attempt-1",
                         new ReservationId("reservation-1"),
                         usage,
-                        "gpt-4o-mini-response"
+                        "gpt-4o-mini-request"
                 )
         ).isInstanceOf(IllegalArgumentException.class);
     }
@@ -593,7 +812,7 @@ class ReservationReconciliationTest {
                         "attempt-1",
                         reservationId,
                         TokenUsage.from(101, 50),
-                        "gpt-4o-mini-response"
+                        "gpt-4o-mini-request"
                 )
         );
 
@@ -625,7 +844,7 @@ class ReservationReconciliationTest {
                         "attempt-1",
                         reservationId,
                         TokenUsage.from(101, 50),
-                        "gpt-4o-mini-response"
+                        "gpt-4o-mini-request"
                 )
         );
 
@@ -665,7 +884,7 @@ class ReservationReconciliationTest {
                         "attempt-1",
                         reservationId,
                         TokenUsage.from(101, 50),
-                        "gpt-4o-mini-response"
+                        "gpt-4o-mini-request"
                 )
         );
 
@@ -822,7 +1041,7 @@ class ReservationReconciliationTest {
                 "attempt-1",
                 reservationId,
                 TokenUsage.from(100, 50),
-                "gpt-4o-mini-response"
+                "gpt-4o-mini-request"
         );
     }
 

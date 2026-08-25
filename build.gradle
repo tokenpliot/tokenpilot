@@ -13,7 +13,7 @@ plugins {
 def publishedModuleDescriptions = [
     'token-pilot-core': 'Framework-independent LLM usage normalization, pricing, cost calculation, and ledger contracts.',
     'token-pilot-spring-ai': 'Optional Spring AI adapter for recording provider-reported LLM usage through Token Pilot.',
-    'token-pilot-micrometer': 'Optional Micrometer publisher for Token Pilot cost and usage accounting events.',
+    'token-pilot-micrometer': 'Optional Micrometer publishers for Token Pilot control, cost, budget, reconciliation, and notification events.',
     'token-pilot-budget': 'Budget policy evaluation and in-memory budget state components for Token Pilot.',
     'token-pilot-notification': 'Budget notification events, handlers, and deduplication components for Token Pilot.',
     'token-pilot-autoconfigure': 'Spring Boot auto-configuration for Token Pilot core and optional adapters.',
@@ -30,7 +30,6 @@ def compatibilityMatrix = [
 ]
 
 def springManagedModules = [
-    'token-pilot-spring-ai',
     'token-pilot-autoconfigure',
     'token-pilot-starter',
     'token-pilot-sample-app'
@@ -312,6 +311,7 @@ tasks.register('verifyPublicationMetadata') {
     group = 'verification'
     description = 'Verifies generated Maven POM metadata for every published Token Pilot module.'
     dependsOn publicationPomTasks
+    dependsOn ':token-pilot-spring-ai:generateMetadataFileForMavenJavaPublication'
     inputs.file(layout.projectDirectory.file('LICENSE'))
 
     doLast {
@@ -370,6 +370,150 @@ tasks.register('verifyPublicationMetadata') {
                 'scm:git:ssh://git@github.com/tokenpliot/tokenpilot.git'
             )
             requirePomValue(moduleName, 'SCM URL', pom.scm.url.text(), 'https://github.com/tokenpliot/tokenpilot')
+        }
+
+        def micrometerPomFile = project(':token-pilot-micrometer')
+            .layout.buildDirectory
+            .file('publications/mavenJava/pom-default.xml')
+            .get()
+            .asFile
+        def micrometerPom = new XmlSlurper(false, false).parse(micrometerPomFile)
+        def micrometerDependencies = micrometerPom.dependencies.dependency.collect {
+            "${it.groupId.text()}:${it.artifactId.text()}:${it.scope.text()}".toString()
+        } as Set
+        if (!micrometerDependencies.contains(
+            'cloud.token-pilot:token-pilot-core:compile'
+        ) || !micrometerDependencies.contains(
+            'io.micrometer:micrometer-core:compile'
+        )) {
+            throw new GradleException(
+                'token-pilot-micrometer POM must expose core and micrometer-core as compile dependencies.'
+            )
+        }
+        def forbiddenMicrometerOwners = micrometerPom.dependencies.dependency.findAll {
+            it.groupId.text() == 'cloud.token-pilot' &&
+                it.artifactId.text() in [
+                    'token-pilot-budget',
+                    'token-pilot-notification'
+                ]
+        }
+        if (!forbiddenMicrometerOwners.isEmpty()) {
+            throw new GradleException(
+                'token-pilot-micrometer POM must keep budget and notification owners optional.'
+            )
+        }
+
+        def springAiPomFile = project(':token-pilot-spring-ai')
+            .layout.buildDirectory
+            .file('publications/mavenJava/pom-default.xml')
+            .get()
+            .asFile
+        def springAiPom = new XmlSlurper(false, false).parse(springAiPomFile)
+        def springAiDependencies = springAiPom.dependencies.dependency.collect {
+            "${it.groupId.text()}:${it.artifactId.text()}:${it.scope.text()}".toString()
+        } as Set
+        def expectedSpringAiDependencies = [
+            'cloud.token-pilot:token-pilot-core:compile',
+            'cloud.token-pilot:token-pilot-budget:compile',
+            'org.springframework.ai:spring-ai-model:compile',
+            'org.springframework.ai:spring-ai-client-chat:compile',
+            'io.projectreactor:reactor-core:compile'
+        ] as Set
+        if (springAiDependencies != expectedSpringAiDependencies) {
+            throw new GradleException(
+                'token-pilot-spring-ai POM must expose every public ABI dependency at compile scope. ' +
+                    "Expected ${expectedSpringAiDependencies}, actual ${springAiDependencies}."
+            )
+        }
+        def springAiManagedDependencies = springAiPom.dependencyManagement.dependencies.dependency.collect {
+            "${it.groupId.text()}:${it.artifactId.text()}:${it.version.text()}:${it.type.text()}:${it.scope.text()}".toString()
+        }
+        def expectedSpringAiManagedDependencies = [
+            'org.springframework.boot:spring-boot-dependencies:4.1.0:pom:import',
+            'org.springframework.ai:spring-ai-bom:2.0.0:pom:import'
+        ] as Set
+        if (springAiManagedDependencies.size() != 2 ||
+            (springAiManagedDependencies as Set) != expectedSpringAiManagedDependencies) {
+            throw new GradleException(
+                'token-pilot-spring-ai POM must import each supported BOM exactly once. ' +
+                    "Expected ${expectedSpringAiManagedDependencies}, actual ${springAiManagedDependencies}."
+            )
+        }
+
+        def springAiModuleFile = project(':token-pilot-spring-ai')
+            .layout.buildDirectory
+            .file('publications/mavenJava/module.json')
+            .get()
+            .asFile
+        def springAiModule = new JsonSlurper().parse(springAiModuleFile)
+        def expectedSpringAiVariantDependencies = [
+            'org.springframework.boot:spring-boot-dependencies',
+            'org.springframework.ai:spring-ai-bom',
+            'cloud.token-pilot:token-pilot-core',
+            'cloud.token-pilot:token-pilot-budget',
+            'org.springframework.ai:spring-ai-model',
+            'org.springframework.ai:spring-ai-client-chat',
+            'io.projectreactor:reactor-core'
+        ] as Set
+        [
+            apiElements: 'java-api',
+            runtimeElements: 'java-runtime'
+        ].each { variantName, usage ->
+            def variant = springAiModule.variants.find { it.name == variantName }
+            if (variant == null || variant.attributes['org.gradle.usage'] != usage) {
+                throw new GradleException(
+                    "token-pilot-spring-ai module metadata is missing ${variantName}."
+                )
+            }
+            def variantDependencies = variant.dependencies.collect {
+                "${it.group}:${it.module}".toString()
+            } as Set
+            if (variantDependencies != expectedSpringAiVariantDependencies) {
+                throw new GradleException(
+                    "token-pilot-spring-ai ${variantName} dependencies differ. " +
+                        "Expected ${expectedSpringAiVariantDependencies}, actual ${variantDependencies}."
+                )
+            }
+            def bootPlatform = variant.dependencies.find {
+                it.group == 'org.springframework.boot' &&
+                    it.module == 'spring-boot-dependencies'
+            }
+            def springAiPlatform = variant.dependencies.find {
+                it.group == 'org.springframework.ai' && it.module == 'spring-ai-bom'
+            }
+            if (bootPlatform?.version?.requires != compatibilityMatrix.springBoot ||
+                bootPlatform?.attributes?.get('org.gradle.category') != 'platform' ||
+                springAiPlatform?.version?.requires != compatibilityMatrix.springAi ||
+                springAiPlatform?.attributes?.get('org.gradle.category') != 'platform') {
+                throw new GradleException(
+                    "token-pilot-spring-ai ${variantName} must carry the supported Boot and Spring AI platforms."
+                )
+            }
+        }
+
+        def starterPomFile = project(':token-pilot-starter')
+            .layout.buildDirectory
+            .file('publications/mavenJava/pom-default.xml')
+            .get()
+            .asFile
+        def starterPom = new XmlSlurper(false, false).parse(starterPomFile)
+        def starterDependencies = starterPom.dependencies.dependency.collect {
+            "${it.groupId.text()}:${it.artifactId.text()}:${it.scope.text()}".toString()
+        } as Set
+        def expectedStarterDependencies = [
+            'cloud.token-pilot:token-pilot-core:compile',
+            'cloud.token-pilot:token-pilot-spring-ai:compile',
+            'cloud.token-pilot:token-pilot-micrometer:compile',
+            'cloud.token-pilot:token-pilot-budget:compile',
+            'cloud.token-pilot:token-pilot-notification:compile',
+            'cloud.token-pilot:token-pilot-autoconfigure:compile'
+        ] as Set
+        if (starterDependencies != expectedStarterDependencies) {
+            throw new GradleException(
+                'token-pilot-starter POM must expose only the Token Pilot runtime graph at compile scope; ' +
+                    'applications select their Spring AI provider separately. ' +
+                    "Expected ${expectedStarterDependencies}, actual ${starterDependencies}."
+            )
         }
     }
 }
@@ -737,7 +881,588 @@ tasks.register('verifyCoreConsumer', Exec) {
     commandLine rootProject.file('gradlew').absolutePath, '--no-daemon', 'run'
 }
 
+def micrometerConsumerDirectory = layout.buildDirectory.dir(
+    'compatibility/micrometer-consumer'
+)
+
+tasks.register('prepareMicrometerConsumer') {
+    group = 'verification'
+    description = 'Generates external consumers for optional Micrometer owners and core-only autoconfiguration.'
+    dependsOn ':token-pilot-core:publishMavenJavaPublicationToStagingRepository'
+    dependsOn ':token-pilot-autoconfigure:publishMavenJavaPublicationToStagingRepository'
+    dependsOn ':token-pilot-micrometer:publishMavenJavaPublicationToStagingRepository'
+    dependsOn ':token-pilot-budget:publishMavenJavaPublicationToStagingRepository'
+    dependsOn ':token-pilot-notification:publishMavenJavaPublicationToStagingRepository'
+    outputs.dir(micrometerConsumerDirectory)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        def consumerDirectory = micrometerConsumerDirectory.get().asFile
+        delete(consumerDirectory)
+
+        def coreOnlySource = new File(
+            consumerDirectory,
+            'core-only/src/main/java/compatibility'
+        )
+        def allOwnersSource = new File(
+            consumerDirectory,
+            'all-owners/src/main/java/compatibility'
+        )
+        def autoConfigureSource = new File(
+            consumerDirectory,
+            'autoconfigure-core-only/src/main/java/compatibility'
+        )
+        coreOnlySource.mkdirs()
+        allOwnersSource.mkdirs()
+        autoConfigureSource.mkdirs()
+
+        new File(consumerDirectory, 'settings.gradle').text = """
+rootProject.name = 'token-pilot-micrometer-consumer'
+include 'core-only', 'all-owners', 'autoconfigure-core-only'
+""".stripIndent().trim() + System.lineSeparator()
+
+        def stagingRepositories = [
+            project(':token-pilot-core'),
+            project(':token-pilot-autoconfigure'),
+            project(':token-pilot-micrometer'),
+            project(':token-pilot-budget'),
+            project(':token-pilot-notification')
+        ].collect { moduleProject ->
+            "maven { url = uri('${moduleProject.layout.buildDirectory.dir('staging-deploy').get().asFile.toURI()}') }"
+        }.join(System.lineSeparator() + '        ')
+
+        new File(consumerDirectory, 'build.gradle').text = """
+subprojects {
+    apply plugin: 'application'
+
+    configurations.configureEach {
+        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+    }
+
+    repositories {
+        ${stagingRepositories}
+        mavenCentral()
+    }
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(${compatibilityMatrix.java})
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.release = ${compatibilityMatrix.java}
+    }
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(consumerDirectory, 'core-only/build.gradle').text = """
+dependencies {
+    implementation 'cloud.token-pilot:token-pilot-micrometer:${project.version}'
+}
+
+application {
+    mainClass = 'compatibility.MicrometerCoreConsumer'
+}
+
+tasks.register('verifyOptionalOwnersAbsent') {
+    doLast {
+        def forbidden = configurations.runtimeClasspath.incoming.resolutionResult
+            .allComponents
+            .findAll { component ->
+                component.moduleVersion?.group == 'cloud.token-pilot' &&
+                    component.moduleVersion?.name in [
+                        'token-pilot-budget',
+                        'token-pilot-notification'
+                    ]
+            }
+        if (!forbidden.isEmpty()) {
+            throw new GradleException('Optional owners leaked into micrometer runtime: ' + forbidden)
+        }
+    }
+}
+
+tasks.named('run') {
+    dependsOn tasks.named('verifyOptionalOwnersAbsent')
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(coreOnlySource, 'MicrometerCoreConsumer.java').text = """
+package compatibility;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.tokenpilot.core.domain.MissingPricingPolicy;
+import io.tokenpilot.core.domain.PricingMissingEvent;
+import io.tokenpilot.core.domain.PricingResolution;
+import io.tokenpilot.micrometer.internal.CoreMetricsPublisher;
+import io.tokenpilot.micrometer.internal.LedgerMicrometerComponents;
+import java.lang.reflect.Method;
+import java.util.Arrays;
+
+public final class MicrometerCoreConsumer {
+    private MicrometerCoreConsumer() {
+    }
+
+    public static void main(String[] args) throws Exception {
+        for (Method method : LedgerMicrometerComponents.class.getDeclaredMethods()) {
+            String signature = method.toGenericString();
+            if (signature.contains("io.tokenpilot.budget")
+                    || signature.contains("io.tokenpilot.notification")) {
+                throw new IllegalStateException("Optional owner leaked into core factory method table");
+            }
+        }
+        for (String optionalType : Arrays.asList(
+                "io.tokenpilot.budget.ReservationAccountingListener",
+                "io.tokenpilot.notification.BudgetNotificationLifecycleListener")) {
+            try {
+                Class.forName(optionalType);
+                throw new IllegalStateException("Optional owner is unexpectedly present: " + optionalType);
+            } catch (ClassNotFoundException expected) {
+                // Expected for the core + micrometer-only consumer.
+            }
+        }
+
+        var registry = new SimpleMeterRegistry();
+        CoreMetricsPublisher publisher =
+                LedgerMicrometerComponents.coreMetricsPublisher(registry);
+        publisher.onPricingMissing(new PricingMissingEvent(
+                MissingPricingPolicy.FAIL_CLOSED,
+                PricingResolution.MISSING_PLAN
+        ));
+        double count = registry.get("tokenpilot.pricing.missing")
+                .tag("policy", "fail_closed")
+                .counter()
+                .count();
+        if (count != 1.0d) {
+            throw new IllegalStateException("Core Micrometer publisher verification failed");
+        }
+        System.out.println("token-pilot-micrometer core-only consumer OK");
+    }
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(consumerDirectory, 'all-owners/build.gradle').text = """
+dependencies {
+    implementation 'cloud.token-pilot:token-pilot-micrometer:${project.version}'
+    implementation 'cloud.token-pilot:token-pilot-budget:${project.version}'
+    implementation 'cloud.token-pilot:token-pilot-notification:${project.version}'
+}
+
+application {
+    mainClass = 'compatibility.MicrometerOwnerConsumer'
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(allOwnersSource, 'MicrometerOwnerConsumer.java').text = """
+package compatibility;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.tokenpilot.budget.ReservationAccountingListener;
+import io.tokenpilot.micrometer.internal.BudgetMicrometerComponents;
+import io.tokenpilot.micrometer.internal.NotificationMicrometerComponents;
+import io.tokenpilot.notification.BudgetNotificationLifecycleListener;
+
+public final class MicrometerOwnerConsumer {
+    private MicrometerOwnerConsumer() {
+    }
+
+    public static void main(String[] args) {
+        var registry = new SimpleMeterRegistry();
+        Object budget = BudgetMicrometerComponents.budgetMetricsPublisher(registry);
+        Object notification = NotificationMicrometerComponents
+                .notificationMetricsPublisher(registry);
+        if (!(budget instanceof ReservationAccountingListener)
+                || !(notification instanceof BudgetNotificationLifecycleListener)) {
+            throw new IllegalStateException("Owner Micrometer composition verification failed");
+        }
+        System.out.println("token-pilot-micrometer all-owners consumer OK");
+    }
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(
+            consumerDirectory,
+            'autoconfigure-core-only/build.gradle'
+        ).text = """
+dependencies {
+    implementation 'cloud.token-pilot:token-pilot-autoconfigure:${project.version}'
+    implementation 'org.springframework.boot:spring-boot:${compatibilityMatrix.springBoot}'
+    implementation 'org.springframework.boot:spring-boot-autoconfigure:${compatibilityMatrix.springBoot}'
+}
+
+application {
+    mainClass = 'compatibility.AutoConfigureCoreConsumer'
+}
+
+tasks.register('verifyOptionalAdaptersAbsent') {
+    doLast {
+        def forbidden = configurations.runtimeClasspath.incoming.resolutionResult
+            .allComponents
+            .findAll { component ->
+                component.moduleVersion?.group == 'cloud.token-pilot' &&
+                    component.moduleVersion?.name in [
+                        'token-pilot-budget',
+                        'token-pilot-notification',
+                        'token-pilot-spring-ai',
+                        'token-pilot-micrometer',
+                        'token-pilot-starter'
+                    ]
+            }
+        if (!forbidden.isEmpty()) {
+            throw new GradleException('Optional adapters leaked into core autoconfigure runtime: ' + forbidden)
+        }
+    }
+}
+
+tasks.named('run') {
+    dependsOn tasks.named('verifyOptionalAdaptersAbsent')
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(autoConfigureSource, 'AutoConfigureCoreConsumer.java').text = """
+package compatibility;
+
+import io.tokenpilot.core.PricingRegistry;
+import io.tokenpilot.core.TokenBudget;
+import io.tokenpilot.core.TokenEstimator;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.context.ConfigurableApplicationContext;
+
+@SpringBootConfiguration
+@EnableAutoConfiguration
+public class AutoConfigureCoreConsumer {
+    public static void main(String[] args) {
+        SpringApplication application = new SpringApplication(
+                AutoConfigureCoreConsumer.class
+        );
+        application.setWebApplicationType(WebApplicationType.NONE);
+        application.setLogStartupInfo(false);
+        try (ConfigurableApplicationContext context = application.run(args)) {
+            context.getBean(PricingRegistry.class);
+            context.getBean(TokenBudget.class);
+            context.getBean(TokenEstimator.class);
+        }
+        System.out.println("token-pilot-autoconfigure core-only consumer OK");
+    }
+}
+""".stripIndent().trim() + System.lineSeparator()
+    }
+}
+
+tasks.register('verifyMicrometerConsumer', Exec) {
+    group = 'verification'
+    description = 'Runs Micrometer owner consumers and core-only autoconfiguration without optional adapters.'
+    dependsOn tasks.named('prepareMicrometerConsumer')
+    workingDir micrometerConsumerDirectory
+    commandLine rootProject.file('gradlew').absolutePath,
+        '--no-daemon',
+        ':core-only:run',
+        ':all-owners:run',
+        ':autoconfigure-core-only:run'
+}
+
+def publishedIntegrationConsumerDirectory = layout.buildDirectory.dir(
+    'compatibility/published-integration-consumer'
+)
+
+tasks.register('preparePublishedIntegrationConsumer') {
+    group = 'verification'
+    description = 'Generates external compile/runtime consumers for the published Spring AI adapter and starter.'
+    dependsOn publishedModuleDescriptions.keySet().collect {
+        ":${it}:publishMavenJavaPublicationToStagingRepository"
+    }
+    outputs.dir(publishedIntegrationConsumerDirectory)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        def consumerDirectory = publishedIntegrationConsumerDirectory.get().asFile
+        delete(consumerDirectory)
+
+        def adapterSource = new File(
+            consumerDirectory,
+            'adapter/src/main/java/compatibility'
+        )
+        def starterSource = new File(
+            consumerDirectory,
+            'starter/src/main/java/compatibility'
+        )
+        def adapterPomSource = new File(
+            consumerDirectory,
+            'adapter-pom/src/main/java/compatibility'
+        )
+        def starterPomSource = new File(
+            consumerDirectory,
+            'starter-pom/src/main/java/compatibility'
+        )
+        adapterSource.mkdirs()
+        starterSource.mkdirs()
+        adapterPomSource.mkdirs()
+        starterPomSource.mkdirs()
+
+        new File(consumerDirectory, 'settings.gradle').text = """
+rootProject.name = 'token-pilot-published-integration-consumer'
+include 'adapter', 'starter', 'adapter-pom', 'starter-pom'
+""".stripIndent().trim() + System.lineSeparator()
+
+        def stagingRepositories = publishedModuleDescriptions.keySet().collect { moduleName ->
+            def moduleProject = project(":${moduleName}")
+            "maven { url = uri('${moduleProject.layout.buildDirectory.dir('staging-deploy').get().asFile.toURI()}') }"
+        }.join(System.lineSeparator() + '        ')
+        def pomOnlyStagingRepositories = publishedModuleDescriptions.keySet().collect { moduleName ->
+            def moduleProject = project(":${moduleName}")
+            """maven {
+            url = uri('${moduleProject.layout.buildDirectory.dir('staging-deploy').get().asFile.toURI()}')
+            metadataSources {
+                mavenPom()
+                artifact()
+            }
+        }""".stripIndent().trim()
+        }.join(System.lineSeparator() + '        ')
+
+        new File(consumerDirectory, 'build.gradle').text = """
+subprojects {
+    apply plugin: 'application'
+
+    configurations.configureEach {
+        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+    }
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(${compatibilityMatrix.java})
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.release = ${compatibilityMatrix.java}
+    }
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(consumerDirectory, 'adapter/build.gradle').text = """
+repositories {
+    ${stagingRepositories}
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'cloud.token-pilot:token-pilot-spring-ai:${project.version}'
+}
+
+application {
+    mainClass = 'compatibility.SpringAiAdapterConsumer'
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(consumerDirectory, 'adapter-pom/build.gradle').text = """
+repositories {
+    ${pomOnlyStagingRepositories}
+    mavenCentral {
+        metadataSources {
+            mavenPom()
+            artifact()
+        }
+    }
+}
+
+dependencies {
+    implementation 'cloud.token-pilot:token-pilot-spring-ai:${project.version}'
+}
+
+application {
+    mainClass = 'compatibility.SpringAiAdapterConsumer'
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        def adapterConsumerSource = """
+package compatibility;
+
+import reactor.core.publisher.Flux;
+import io.tokenpilot.budget.AtomicBudgetStateStore;
+import io.tokenpilot.budget.BudgetStateStore;
+import io.tokenpilot.budget.ReservationAccounting;
+import io.tokenpilot.core.domain.TokenUsage;
+import io.tokenpilot.springai.LedgerAdvisor;
+import io.tokenpilot.springai.ReservedOutputTokensResolver;
+import io.tokenpilot.springai.UsageExtractor;
+import io.tokenpilot.springai.internal.LedgerSpringAiComponents;
+import java.util.OptionalLong;
+import org.springframework.ai.chat.client.ChatClientRequest;
+import org.springframework.ai.chat.client.ChatClientResponse;
+import org.springframework.ai.chat.client.advisor.api.BaseAdvisor;
+
+public final class SpringAiAdapterConsumer {
+    private SpringAiAdapterConsumer() {
+    }
+
+    public static void main(String[] args) {
+        UsageExtractor extractor = ignored -> TokenUsage.from(1, 1);
+        ReservedOutputTokensResolver resolver = ignored -> OptionalLong.of(128L);
+        Object defaultExtractor = LedgerSpringAiComponents.defaultUsageExtractor();
+
+        Class<?>[] publicApiTypes = {
+            LedgerAdvisor.class,
+            ChatClientRequest.class,
+            ChatClientResponse.class,
+            BaseAdvisor.class,
+            Flux.class,
+            BudgetStateStore.class,
+            ReservationAccounting.class,
+            AtomicBudgetStateStore.class
+        };
+        if (!BaseAdvisor.class.isAssignableFrom(LedgerAdvisor.class)
+                || extractor == null
+                || resolver == null
+                || defaultExtractor == null
+                || publicApiTypes.length != 8) {
+            throw new IllegalStateException("Published Spring AI adapter API verification failed");
+        }
+        System.out.println("token-pilot-spring-ai published consumer OK");
+    }
+}
+""".stripIndent().trim() + System.lineSeparator()
+        new File(adapterSource, 'SpringAiAdapterConsumer.java').text = adapterConsumerSource
+        new File(adapterPomSource, 'SpringAiAdapterConsumer.java').text = adapterConsumerSource
+
+        def starterBuildBody = """
+configurations {
+    starterOnly {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+dependencies {
+    // Token Pilot remains one user entrypoint; the application selects one provider.
+    implementation 'cloud.token-pilot:token-pilot-starter:${project.version}'
+    implementation 'org.springframework.ai:spring-ai-starter-model-openai:${compatibilityMatrix.springAi}'
+
+    starterOnly 'cloud.token-pilot:token-pilot-starter:${project.version}'
+}
+
+application {
+    mainClass = 'compatibility.StarterConsumer'
+}
+
+tasks.register('verifyStarterDoesNotBundleProvider') {
+    doLast {
+        def providerArtifacts = configurations.starterOnly.incoming.resolutionResult
+            .allComponents
+            .findAll { component ->
+                component.moduleVersion?.group == 'org.springframework.ai' &&
+                    (component.moduleVersion.name == 'spring-ai-openai' ||
+                        component.moduleVersion.name.startsWith('spring-ai-starter-model-'))
+            }
+        if (!providerArtifacts.isEmpty()) {
+            throw new GradleException(
+                'token-pilot-starter must not choose a Spring AI provider: ' + providerArtifacts
+            )
+        }
+    }
+}
+
+tasks.named('run') {
+    dependsOn tasks.named('verifyStarterDoesNotBundleProvider')
+}
+""".stripIndent().trim() + System.lineSeparator()
+
+        new File(consumerDirectory, 'starter/build.gradle').text = """
+repositories {
+    ${stagingRepositories}
+    mavenCentral()
+}
+
+""".stripIndent() + starterBuildBody
+        new File(consumerDirectory, 'starter-pom/build.gradle').text = """
+repositories {
+    ${pomOnlyStagingRepositories}
+    mavenCentral {
+        metadataSources {
+            mavenPom()
+            artifact()
+        }
+    }
+}
+
+""".stripIndent() + starterBuildBody
+
+        def starterConsumerSource = """
+package compatibility;
+
+import io.tokenpilot.autoconfigure.LedgerChatClientBuilderCustomizer;
+import io.tokenpilot.budget.AtomicBudgetStateStore;
+import io.tokenpilot.budget.BudgetStateStore;
+import io.tokenpilot.budget.ReservationAccounting;
+import io.tokenpilot.notification.BudgetNotificationHandler;
+import io.tokenpilot.notification.BudgetNotificationService;
+import io.tokenpilot.springai.LedgerAdvisor;
+import java.util.Map;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.Bean;
+
+@SpringBootConfiguration
+@EnableAutoConfiguration
+public class StarterConsumer {
+    @Bean
+    BudgetNotificationHandler budgetNotificationHandler() {
+        return event -> { };
+    }
+
+    public static void main(String[] args) {
+        SpringApplication application = new SpringApplication(StarterConsumer.class);
+        application.setWebApplicationType(WebApplicationType.NONE);
+        application.setLogStartupInfo(false);
+        application.setDefaultProperties(Map.of(
+            "spring.ai.openai.api-key", "published-consumer-test-key",
+            "token-pilot.budget.enabled", "true",
+            "token-pilot.notification.enabled", "true",
+            "token-pilot.metrics.enabled", "false"
+        ));
+
+        try (ConfigurableApplicationContext context = application.run(args)) {
+            AtomicBudgetStateStore atomicStore = context.getBean(AtomicBudgetStateStore.class);
+            if (atomicStore != context.getBean(BudgetStateStore.class)
+                    || atomicStore != context.getBean(ReservationAccounting.class)) {
+                throw new IllegalStateException("Budget admission/accounting bean identity was split");
+            }
+            context.getBean(LedgerAdvisor.class);
+            context.getBean(LedgerChatClientBuilderCustomizer.class);
+            context.getBean(BudgetNotificationService.class);
+            context.getBean(OpenAiChatModel.class);
+        }
+        System.out.println("token-pilot-starter published consumer OK");
+    }
+}
+""".stripIndent().trim() + System.lineSeparator()
+        new File(starterSource, 'StarterConsumer.java').text = starterConsumerSource
+        new File(starterPomSource, 'StarterConsumer.java').text = starterConsumerSource
+    }
+}
+
+tasks.register('verifyPublishedIntegrationConsumer', Exec) {
+    group = 'verification'
+    description = 'Compiles and runs published Spring AI adapter and starter consumers.'
+    dependsOn tasks.named('preparePublishedIntegrationConsumer')
+    workingDir publishedIntegrationConsumerDirectory
+    commandLine rootProject.file('gradlew').absolutePath,
+        '--no-daemon',
+        ':adapter:run',
+        ':starter:run',
+        ':adapter-pom:run',
+        ':starter-pom:run'
+}
+
 tasks.named('check') {
     dependsOn tasks.named('verifyCompatibilityMatrix')
     dependsOn tasks.named('verifyCoreConsumer')
+    dependsOn tasks.named('verifyMicrometerConsumer')
+    dependsOn tasks.named('verifyPublishedIntegrationConsumer')
 }

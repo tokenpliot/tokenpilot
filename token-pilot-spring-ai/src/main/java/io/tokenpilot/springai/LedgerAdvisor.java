@@ -4,6 +4,7 @@ import org.springframework.ai.chat.client.ChatClientRequest;
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.api.AdvisorChain;
 import org.springframework.ai.chat.client.advisor.api.BaseAdvisor;
+import org.springframework.core.Ordered;
 
 /**
  * ChatClient 호출 시 토큰 사용량을 가로채서 기록하는 어드바이저 인터페이스.
@@ -26,6 +27,6 @@ public interface LedgerAdvisor extends BaseAdvisor {
 
     @Override
     default int getOrder() {
-        return 0;
+        return Ordered.LOWEST_PRECEDENCE - 1;
     }
 }

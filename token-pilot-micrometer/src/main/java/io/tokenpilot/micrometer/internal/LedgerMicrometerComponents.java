@@ -21,4 +21,16 @@ public final class LedgerMicrometerComponents {
     public static LedgerListener microCostMetricsPublisher(MeterRegistry meterRegistry, MetricsOptions options) {
         return new MicroCostMetricsPublisher(meterRegistry, options);
     }
+
+    public static MicroCostMetricsPublisher legacyMicroCostMetricsPublisher(
+            MeterRegistry meterRegistry,
+            MetricsOptions options
+    ) {
+        return new MicroCostMetricsPublisher(meterRegistry, options);
+    }
+
+    public static CoreMetricsPublisher coreMetricsPublisher(MeterRegistry meterRegistry) {
+        return new CoreMetricsPublisher(meterRegistry);
+    }
+
 }

@@ -51,11 +51,87 @@ library behind it.
 ## Project Status
 
 TokenPilot 0.1.0 is under active development. The current foundation includes
-Spring AI usage integration, model cost calculation, metrics, basic budget
-policy, Spring Boot autoconfiguration, and a framework-independent in-memory
-atomic budget reservation/idempotency foundation. The MVP is extending this
-foundation with provider-connected preflight control and actual usage
-reconciliation.
+model cost calculation, owner-specific metrics, atomic budget reservation and
+notification, and Spring Boot autoconfiguration. For supported non-streaming
+Spring AI `ChatClient` calls, TokenPilot now performs conservative preflight,
+claims one provider dispatch, and reconciles provider-reported actual usage
+against the reservation-time pricing snapshot.
+
+## Micrometer metrics
+
+When a `MeterRegistry` is available, the Spring Boot starter publishes
+TokenPilot-owned, low-cardinality metrics for control and accounting outcomes:
+
+| Metric | Tags | Meaning |
+| --- | --- | --- |
+| `tokenpilot.cost.total` | `currency` | Newly committed actual cost from usage-based reconciliation |
+| `tokenpilot.preflight.requests` | `decision`, `reason` | Context admission decisions |
+| `tokenpilot.budget.reservations` | `state` | Atomic reservation results |
+| `tokenpilot.reconciliation.error.tokens` | `direction` | Absolute estimate/actual token error |
+| `tokenpilot.reconciliation.outcomes` | `outcome`, `reason` | Applied reconciliation outcomes |
+| `tokenpilot.pricing.missing` | `policy` | Missing pricing observed at the provider boundary |
+| `tokenpilot.listener.failures` | `listener`, `phase` | Isolated accounting-listener failures |
+| `tokenpilot.notification.events` | `outcome`, `threshold` | Notification delivery and deduplication outcomes |
+
+The default user-tag whitelist is empty. The metrics above never include raw
+model, tenant, user, request, reservation, or idempotency identifiers. Their
+tag values come from bounded domain enums or registered currency codes.
+
+```yaml
+token-pilot:
+  metrics:
+    enabled: true
+    tag-whitelist: []
+    legacy-ai-token-metrics-enabled: false
+```
+
+The former `ai.token.*` meters are disabled by default because Spring AI
+Observability may already publish standard token telemetry. Set
+`token-pilot.metrics.legacy-ai-token-metrics-enabled=true` to opt in during
+migration. This is a 0.1.x compatibility bridge, including the legacy raw
+`model` tag, and is planned for removal in 0.2.0. Migrate dashboards to Spring
+AI token telemetry and the `tokenpilot.*` control/accounting meters before
+then. `tag-whitelist` applies only to that legacy path and limits keys, not the
+cardinality of application-provided values. Existing direct
+`MicroCostMetricsPublisher` constructors retain their legacy `tenant_id`
+allowlist behavior; the starter default remains empty.
+
+Accounting metrics consume newly applied reservation transitions, so reused
+callbacks do not add cost twice and unavailable actual usage is recorded as
+`reconciliation_required`, not as zero cost or zero error. Listener delivery
+is synchronous, best-effort, and at-most-once without a durable outbox.
+Micrometer counters use `double` internally and are operational telemetry, not
+the monetary source of truth; the ledger's `BigDecimal` values remain
+authoritative. The legacy cost-only commit methods cannot carry token/model
+correlation and do not emit these accounting metrics; new reservations should
+use the usage-based reconciliation API.
+
+`LedgerListener` and other optional observer `RuntimeException`s are isolated:
+they do not change ledger/provider results and later listeners still run.
+JVM `Error`s are not swallowed.
+
+For direct autoconfiguration composition, use
+`TokenPilotBudgetPolicyFactory.from(properties)` instead of the former
+`TokenPilotProperties.toBudgetPolicy()`. Keeping the budget return type out of
+the shared properties class allows autoconfiguration to start when the optional
+budget module is absent.
+
+## Spring AI starter
+
+Spring Boot applications use one Token Pilot convenience starter and select
+their Spring AI provider separately. For example:
+
+```gradle
+dependencies {
+    implementation 'cloud.token-pilot:token-pilot-starter:<version>'
+    implementation 'org.springframework.ai:spring-ai-starter-model-openai:2.0.0'
+}
+```
+
+Token Pilot does not choose or bundle a provider. The published adapter and
+starter are compile/runtime verified from their generated Maven and Gradle
+metadata against the supported Java 25, Spring Boot 4.1.0, and Spring AI 2.0.0
+baseline.
 
 ## Framework-independent core
 
@@ -108,10 +184,19 @@ Boot, Spring AI, Micrometer, or Reactor dependencies. Spring Boot 3, Spring AI
 are not part of the 0.1.0 support guarantee.
 
 The verified Spring AI path is the synchronous `ChatClient` call lifecycle with
-a fake provider. Streaming cancellation, provider-connected preflight
-blocking, reservation lifecycle reconciliation, and estimate/actual
-reconciliation are still MVP work and are not included in this compatibility
-claim.
+a fake provider, including preflight blocking, atomic reservation, dispatch,
+and estimate/actual reconciliation. Real-provider compatibility, chunk
+accounting, streaming cancellation, and partial-usage reconciliation are not
+included in this compatibility claim.
+
+If a provider returns a model different from the request pricing snapshot,
+TokenPilot keeps the estimate as `PRICING_RECONCILIATION_REQUIRED` instead of
+charging the request model's price. The pending event preserves the provider
+usage and response model; an application that has an immutable response-model
+pricing snapshot can finish the lifecycle with
+`ReservationAccounting.reconcileLateActual(command, responsePricingSnapshot)`.
+Mismatched model, currency, pricing terms, state, or duplicate callbacks remain
+fail-closed.
 
 ## License
 

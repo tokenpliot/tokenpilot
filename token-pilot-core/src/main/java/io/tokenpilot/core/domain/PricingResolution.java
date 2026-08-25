@@ -9,4 +9,8 @@ public enum PricingResolution {
     public boolean isResolved() {
         return this == RESOLVED;
     }
+
+    public boolean isMissing() {
+        return this == MISSING_PLAN || this == MISSING_RATE;
+    }
 }

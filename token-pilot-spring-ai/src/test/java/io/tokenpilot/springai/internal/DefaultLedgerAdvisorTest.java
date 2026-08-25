@@ -13,6 +13,7 @@ import io.tokenpilot.core.*;
 import io.tokenpilot.core.domain.*;
 import io.tokenpilot.core.exception.MissingPricingException;
 import io.tokenpilot.core.internal.LedgerComponents;
+import io.tokenpilot.springai.LedgerAdvisor;
 import io.tokenpilot.springai.UsageExtractor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,7 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.core.Ordered;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -664,6 +666,179 @@ class DefaultLedgerAdvisorTest {
     }
 
     @Test
+    @DisplayName("pre-call missing pricing은 provider 전 한 번만 발행하고 after에서 중복하지 않는다")
+    void publishesPreCallPricingMissExactlyOnce() {
+        LedgerManager ledgerManager = mock(LedgerManager.class);
+        UsageExtractor extractor = mock(UsageExtractor.class);
+        PricingRegistry pricingRegistry = mock(PricingRegistry.class);
+        List<PricingMissingEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        when(extractor.extract(any())).thenReturn(TokenUsage.from(100, 200));
+        when(pricingRegistry.resolveSnapshot("missing-model", PricingPlan.DEFAULT_PRICING_POLICY_ID))
+                .thenReturn(Optional.empty());
+
+        LedgerAdvisor advisor = LedgerSpringAiComponents.defaultLedgerAdvisor(
+                ledgerManager,
+                extractor,
+                null,
+                null,
+                mock(CostCalculator.class),
+                pricingRegistry,
+                LedgerComponents.defaultPricingEvaluator(),
+                MissingPricingPolicy.FAIL_OPEN,
+                List.of(events::add)
+        );
+        ChatClientRequest request = new ChatClientRequest(
+                new Prompt("test"),
+                Map.of(DefaultLedgerAdvisor.MODEL_ID_CONTEXT, "missing-model")
+        );
+
+        ChatClientRequest resolved = advisor.before(request, mock(AdvisorChain.class));
+        advisor.after(
+                response("missing-model", resolved.context()),
+                mock(AdvisorChain.class)
+        );
+
+        assertThat(events).containsExactly(new PricingMissingEvent(
+                MissingPricingPolicy.FAIL_OPEN,
+                PricingResolution.MISSING_PLAN
+        ));
+    }
+
+    @Test
+    @DisplayName("actual cost 계산의 MissingPricingException도 한 번 발행한다")
+    void publishesActualPricingMissExactlyOnce() {
+        LedgerManager ledgerManager = mock(LedgerManager.class);
+        UsageExtractor extractor = mock(UsageExtractor.class);
+        List<PricingMissingEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        TokenUsage usage = TokenUsage.from(100, 200);
+        PricingSnapshot snapshot = PricingSnapshot.from(
+                new PricingPlan(
+                        "gpt-4o",
+                        new BigDecimal("0.01"),
+                        new BigDecimal("0.03"),
+                        Currency.getInstance("USD")
+                ),
+                PricingSnapshot.DEFAULT_CATALOG_VERSION,
+                Instant.parse("2026-07-30T00:00:00Z")
+        );
+
+        when(extractor.extract(any())).thenReturn(usage);
+        when(ledgerManager.record(same(snapshot), same(usage), anyMap()))
+                .thenThrow(new MissingPricingException(PricingResolution.MISSING_RATE));
+
+        DefaultLedgerAdvisor advisor = new DefaultLedgerAdvisor(
+                ledgerManager,
+                extractor,
+                null,
+                null,
+                mock(CostCalculator.class),
+                null,
+                LedgerComponents.defaultPricingEvaluator(),
+                MissingPricingPolicy.FAIL_OPEN,
+                List.of(events::add)
+        );
+
+        ChatClientResponse result = advisor.after(
+                response(
+                        "gpt-4o",
+                        Map.of(
+                                DefaultLedgerAdvisor.PRICING_SNAPSHOT_CONTEXT, snapshot,
+                                DefaultLedgerAdvisor.PRICING_RESOLUTION_CONTEXT, PricingResolution.RESOLVED
+                        )
+                ),
+                mock(AdvisorChain.class)
+        );
+
+        assertThat(result.context().get(DefaultLedgerAdvisor.PRICING_RECONCILIATION_RESULT_CONTEXT))
+                .isEqualTo(PricingReconciliationResult.UNPRICED);
+        assertThat(events).containsExactly(new PricingMissingEvent(
+                MissingPricingPolicy.FAIL_OPEN,
+                PricingResolution.MISSING_RATE
+        ));
+    }
+
+    @Test
+    @DisplayName("legacy actual pricing miss는 한 번 발행하고 기존 예외를 그대로 전파한다")
+    void publishesLegacyActualPricingMissWithoutChangingFailureSemantics() {
+        LedgerManager ledgerManager = mock(LedgerManager.class);
+        UsageExtractor extractor = mock(UsageExtractor.class);
+        List<PricingMissingEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        TokenUsage usage = TokenUsage.from(100, 200);
+        MissingPricingException failure = new MissingPricingException(PricingResolution.MISSING_PLAN);
+
+        when(extractor.extract(any())).thenReturn(usage);
+        when(ledgerManager.record(eq("missing-model"), same(usage), anyMap()))
+                .thenThrow(failure);
+
+        DefaultLedgerAdvisor advisor = new DefaultLedgerAdvisor(
+                ledgerManager,
+                extractor,
+                null,
+                null,
+                null,
+                null,
+                LedgerComponents.defaultPricingEvaluator(),
+                MissingPricingPolicy.FAIL_OPEN,
+                List.of(events::add)
+        );
+
+        assertThatThrownBy(() -> advisor.after(
+                response("missing-model", Map.of()),
+                mock(AdvisorChain.class)
+        )).isSameAs(failure);
+        assertThat(events).containsExactly(new PricingMissingEvent(
+                MissingPricingPolicy.FAIL_OPEN,
+                PricingResolution.MISSING_PLAN
+        ));
+    }
+
+    @Test
+    @DisplayName("pricing miss listener 실패는 fail-closed 판정과 다음 listener를 바꾸지 않는다")
+    void isolatesPricingMissListenerFailures() {
+        LedgerManager ledgerManager = mock(LedgerManager.class);
+        PricingRegistry pricingRegistry = mock(PricingRegistry.class);
+        AtomicInteger failedDeliveries = new AtomicInteger();
+        List<PricingMissingEvent> received = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        when(pricingRegistry.resolveSnapshot("missing-model", PricingPlan.DEFAULT_PRICING_POLICY_ID))
+                .thenReturn(Optional.empty());
+
+        DefaultLedgerAdvisor advisor = new DefaultLedgerAdvisor(
+                ledgerManager,
+                mock(UsageExtractor.class),
+                null,
+                null,
+                mock(CostCalculator.class),
+                pricingRegistry,
+                LedgerComponents.defaultPricingEvaluator(),
+                MissingPricingPolicy.FAIL_CLOSED,
+                List.of(
+                        event -> {
+                            failedDeliveries.incrementAndGet();
+                            throw new IllegalStateException("listener failed");
+                        },
+                        received::add
+                )
+        );
+        ChatClientRequest request = new ChatClientRequest(
+                new Prompt("test"),
+                Map.of(DefaultLedgerAdvisor.MODEL_ID_CONTEXT, "missing-model")
+        );
+
+        assertThatThrownBy(() -> advisor.before(request, mock(AdvisorChain.class)))
+                .isInstanceOf(MissingPricingException.class)
+                .extracting(exception -> ((MissingPricingException) exception).getResolution())
+                .isEqualTo(PricingResolution.MISSING_PLAN);
+        assertThat(failedDeliveries).hasValue(1);
+        assertThat(received).containsExactly(new PricingMissingEvent(
+                MissingPricingPolicy.FAIL_CLOSED,
+                PricingResolution.MISSING_PLAN
+        ));
+        verifyNoInteractions(ledgerManager);
+    }
+
+    @Test
     @DisplayName("FAIL_OPEN은 model id가 없어도 MISSING_PLAN을 보존하고 UNPRICED로 남겨야 한다")
     void failOpenPreservesMissingPlanWhenModelIdIsMissing() {
         LedgerManager ledgerManager = mock(LedgerManager.class);
@@ -1010,7 +1185,7 @@ class DefaultLedgerAdvisorTest {
         DefaultLedgerAdvisor advisor = new DefaultLedgerAdvisor(mock(LedgerManager.class), mock(UsageExtractor.class));
 
         assertThat(advisor.getName()).isEqualTo("LedgerAdvisor");
-        assertThat(advisor.getOrder()).isEqualTo(0);
+        assertThat(advisor.getOrder()).isEqualTo(Ordered.LOWEST_PRECEDENCE - 1);
     }
 
     private static final Currency USD = Currency.getInstance("USD");

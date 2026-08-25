@@ -1,14 +1,10 @@
 package io.tokenpilot.autoconfigure;
 
-import io.tokenpilot.budget.BudgetPolicy;
-import io.tokenpilot.core.domain.Cost;
 import io.tokenpilot.core.domain.PricingPlan;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
-import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Currency;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -32,6 +28,9 @@ public class TokenPilotProperties {
 
     @NestedConfigurationProperty
     private NotificationProperties notification = new NotificationProperties();
+
+    @NestedConfigurationProperty
+    private SpringAiProperties springAi = new SpringAiProperties();
 
     public boolean isEnabled() {
         return enabled;
@@ -73,6 +72,14 @@ public class TokenPilotProperties {
         this.notification = notification;
     }
 
+    public SpringAiProperties getSpringAi() {
+        return springAi;
+    }
+
+    public void setSpringAi(SpringAiProperties springAi) {
+        this.springAi = springAi;
+    }
+
     public List<PricingPlan> toPricingPlans() {
         if (pricing == null || pricing.getPlans() == null) {
             return List.of();
@@ -82,20 +89,6 @@ public class TokenPilotProperties {
                       .stream()
                       .map(PricingPlanProperties::toPricingPlan)
                       .toList();
-    }
-
-    public BudgetPolicy toBudgetPolicy() {
-        return new BudgetPolicy(
-            budget.getPolicyId(),
-            budget.getTargetType(),
-            budget.getTargetTagKey(),
-            budget.getFallbackTargetId(),
-            Cost.of(
-                budget.getMonthlyLimit(),
-                Currency.getInstance(budget.getCurrency())
-            ),
-            ZoneId.of(budget.getZoneId())
-        );
     }
 
     public static class PricingProperties {
@@ -112,7 +105,8 @@ public class TokenPilotProperties {
 
     public static class MetricsProperties {
         private boolean enabled = true;
-        private Set<String> tagWhitelist = new HashSet<>(List.of("tenant_id"));
+        private Set<String> tagWhitelist = new HashSet<>();
+        private boolean legacyAiTokenMetricsEnabled = false;
 
         public boolean isEnabled() {
             return enabled;
@@ -128,6 +122,16 @@ public class TokenPilotProperties {
 
         public void setTagWhitelist(Set<String> tagWhitelist) {
             this.tagWhitelist = tagWhitelist;
+        }
+
+        public boolean isLegacyAiTokenMetricsEnabled() {
+            return legacyAiTokenMetricsEnabled;
+        }
+
+        public void setLegacyAiTokenMetricsEnabled(
+                boolean legacyAiTokenMetricsEnabled
+        ) {
+            this.legacyAiTokenMetricsEnabled = legacyAiTokenMetricsEnabled;
         }
     }
 
@@ -221,6 +225,36 @@ public class TokenPilotProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    public static class SpringAiProperties {
+        private String defaultModelId;
+        private Long defaultReservedOutputTokens;
+        private long framingHeadroomTokens;
+
+        public String getDefaultModelId() {
+            return defaultModelId;
+        }
+
+        public void setDefaultModelId(String defaultModelId) {
+            this.defaultModelId = defaultModelId;
+        }
+
+        public Long getDefaultReservedOutputTokens() {
+            return defaultReservedOutputTokens;
+        }
+
+        public void setDefaultReservedOutputTokens(Long defaultReservedOutputTokens) {
+            this.defaultReservedOutputTokens = defaultReservedOutputTokens;
+        }
+
+        public long getFramingHeadroomTokens() {
+            return framingHeadroomTokens;
+        }
+
+        public void setFramingHeadroomTokens(long framingHeadroomTokens) {
+            this.framingHeadroomTokens = framingHeadroomTokens;
         }
     }
 }

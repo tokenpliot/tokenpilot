@@ -1,6 +1,9 @@
 package io.tokenpilot.sample;
 
+import io.tokenpilot.core.TokenBudget;
+import io.tokenpilot.core.TokenEstimator;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
@@ -21,7 +24,6 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "token-pilot.pricing.plans[0].rates.PROMPT=0.00015",
                 "token-pilot.pricing.plans[0].rates.COMPLETION=0.00060",
                 "token-pilot.metrics.enabled=true",
-                "token-pilot.metrics.tag-whitelist[0]=tenant_id",
                 "management.endpoints.web.exposure.include=prometheus,health"
         }
 )
@@ -31,6 +33,12 @@ class SampleApplicationE2ETest {
 
     @LocalServerPort
     private int port;
+
+    @Autowired
+    private TokenEstimator tokenEstimator;
+
+    @Autowired
+    private TokenBudget tokenBudget;
 
     @Test
     void starterEndpointsAndPrometheusMetricsWorkEndToEnd() throws Exception {
@@ -46,7 +54,10 @@ class SampleApplicationE2ETest {
                 .contains("\"ledgerManager\":true")
                 .contains("\"ledgerAdvisor\":true")
                 .contains("\"pricingRegistry\":true")
-                .contains("\"microCostMetricsPublisher\":true");
+                .contains("\"tokenPilotCoreMetricsPublisher\":true")
+                .contains("\"tokenPilotBudgetMetricsPublisher\":true")
+                .contains("\"tokenPilotNotificationMetricsPublisher\":true")
+                .contains("\"microCostMetricsPublisher\":false");
 
         HttpResponse<String> record = get("/test/token-pilot/record");
         assertThat(record.statusCode()).isEqualTo(200);
@@ -55,13 +66,22 @@ class SampleApplicationE2ETest {
                 .contains("\"cost\":\"0.001350\"")
                 .contains("\"currency\":\"USD\"");
 
+        tokenBudget.check(
+                "gpt-4o-mini",
+                tokenEstimator.estimate("sample preflight"),
+                256
+        );
+
         HttpResponse<String> prometheus = get("/actuator/prometheus");
         assertThat(prometheus.statusCode()).isEqualTo(200);
         assertThat(prometheus.body())
-                .contains("ai_token_usage_total")
-                .contains("ai_token_usage_distribution")
-                .contains("ai_token_cost_total")
-                .contains("tenant_id=\"sample-tenant\"")
+                .contains("tokenpilot_preflight_requests_total")
+                .contains("decision=\"indeterminate\"")
+                .contains("reason=\"incomplete_scope\"")
+                .doesNotContain("ai_token_usage_total")
+                .doesNotContain("ai_token_usage_distribution")
+                .doesNotContain("ai_token_cost_total")
+                .doesNotContain("tenant_id=\"sample-tenant\"")
                 .doesNotContain("user_id=\"sample-user\"");
     }
 

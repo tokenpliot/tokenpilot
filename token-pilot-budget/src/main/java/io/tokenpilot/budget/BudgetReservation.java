@@ -130,6 +130,13 @@ public record BudgetReservation(
         );
     }
 
+    /**
+     * 같은 idempotency key에 전달된 요청이 기존 예약과 같은 비용 책임을 뜻하는지 비교합니다.
+     *
+     * <p>{@link PricingSnapshot#checkedAt()}은 가격 조회 시점의 관측 metadata이므로 비교에서
+     * 제외합니다. 반면 model, pricing policy, catalog version, currency, rate와 token estimate를
+     * 포함해 실제 가격 또는 예약 책임을 바꾸는 값은 모두 일치해야 합니다.</p>
+     */
     public boolean matches(BudgetReservationRequest request) {
         return key.equals(request.key())
                 && limit.equals(request.limit())
@@ -139,8 +146,27 @@ public record BudgetReservation(
                 && Objects.equals(modelId, request.modelId())
                 && Objects.equals(pricingPolicyId, request.pricingPolicyId())
                 && Objects.equals(catalogVersion, request.catalogVersion())
-                && pricingSnapshot.equals(request.pricingSnapshot())
+                && hasSamePricingTerms(
+                        pricingSnapshot,
+                        request.pricingSnapshot()
+                )
                 && tokenEstimate.equals(request.tokenEstimate());
+    }
+
+    private static boolean hasSamePricingTerms(
+            Optional<PricingSnapshot> existing,
+            Optional<PricingSnapshot> candidate
+    ) {
+        if (existing.isEmpty() || candidate.isEmpty()) {
+            return existing.isEmpty() && candidate.isEmpty();
+        }
+
+        PricingSnapshot existingSnapshot = existing.orElseThrow();
+        PricingSnapshot candidateSnapshot = candidate.orElseThrow();
+        return PricingSnapshot.haveSameBillingTerms(
+                existingSnapshot,
+                candidateSnapshot
+        );
     }
 
     /** 이 예약이 지정한 provider 요청에 속하는지 확인합니다. */

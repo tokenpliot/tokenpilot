@@ -1,6 +1,9 @@
 package io.tokenpilot.budget;
 
 import io.tokenpilot.core.domain.Cost;
+import io.tokenpilot.core.domain.PricingSnapshot;
+
+import java.util.Objects;
 
 /**
  * 예약의 회계 상태와 금액을 변경하는 단일 진입점입니다.
@@ -106,7 +109,11 @@ public interface ReservationAccounting {
      */
     ReservationTransition commitCost(ReservationId reservationId, Cost actualCost);
 
-    /** provider actual usage를 예약 시점 가격으로 계산하여 확정합니다. */
+    /**
+     * provider actual usage를 예약 시점 가격으로 계산하여 확정합니다.
+     * 응답 모델이 예약 pricing snapshot과 다르면 다른 모델 가격을 request 가격으로
+     * 확정하지 않도록 거부합니다.
+     */
     ReservationReconciliation commit(ActualUsageCommand command);
 
     /** actual을 확보하지 못한 예약을 정산 대기로 전환합니다. */
@@ -124,8 +131,41 @@ public interface ReservationAccounting {
             ReservationAccountingReason reason
     );
 
-    /** 늦게 도착한 provider actual usage를 예약 시점 가격으로 계산하여 확정합니다. */
+    /**
+     * response model과 actual usage를 보존하면서 pricing reconciliation 대기로 이동합니다.
+     * 기존 구현은 command metadata를 보존하지 않는 호환 동작으로 위임할 수 있습니다.
+     */
+    default ReservationTransition markReconciliationRequired(
+            ActualUsageCommand command,
+            ReservationAccountingReason reason
+    ) {
+        Objects.requireNonNull(command, "command must not be null");
+        return markReconciliationRequired(command.reservationId(), reason);
+    }
+
+    /**
+     * 늦게 도착한 provider actual usage를 예약 시점 가격으로 계산하여 확정합니다.
+     * 응답 모델은 예약 pricing snapshot의 모델과 같아야 합니다.
+     */
     ReservationReconciliation reconcileLateActual(ActualUsageCommand command);
+
+    /**
+     * pending actual에 response model의 명시적 immutable pricing snapshot을 적용합니다.
+     * 기본 구현은 기존 예약 snapshot만 지원하는 구현과의 호환을 위해 fail-closed합니다.
+     */
+    default ReservationReconciliation reconcileLateActual(
+            ActualUsageCommand command,
+            PricingSnapshot actualPricingSnapshot
+    ) {
+        Objects.requireNonNull(command, "command must not be null");
+        Objects.requireNonNull(
+                actualPricingSnapshot,
+                "actualPricingSnapshot must not be null"
+        );
+        throw new UnsupportedOperationException(
+                "late reconciliation with an alternate pricing snapshot is unsupported"
+        );
+    }
 
     /**
      * pricing snapshot과 token estimate가 없던 pending 호환 예약을 caller가 계산한 actual 비용으로 확정합니다.
