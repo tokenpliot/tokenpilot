@@ -55,4 +55,62 @@ public record PricingSnapshot(
                 plan.currency()
         );
     }
+
+    /**
+     * 가격 조회 시각을 제외하고 실제 비용 책임을 결정하는 terms가 같은지 반환합니다.
+     * {@link #checkedAt()}은 같은 요청의 재시도에서 달라질 수 있는 관측 metadata이므로
+     * 멱등성 fingerprint에는 포함하지 않습니다.
+     */
+    public boolean hasSameBillingTerms(PricingSnapshot other) {
+        return haveSameBillingTerms(this, other);
+    }
+
+    /**
+     * 두 snapshot의 비용 책임 terms를 비교합니다. 테스트 double처럼 rate map이 없는
+     * 호환 snapshot은 양쪽 모두 없을 때 같은 것으로 취급합니다.
+     */
+    public static boolean haveSameBillingTerms(
+            PricingSnapshot first,
+            PricingSnapshot second
+    ) {
+        Objects.requireNonNull(first, "first must not be null");
+        Objects.requireNonNull(second, "second must not be null");
+        if (!Objects.equals(first.modelId(), second.modelId())
+                || !Objects.equals(first.pricingPolicyId(), second.pricingPolicyId())
+                || !Objects.equals(first.catalogVersion(), second.catalogVersion())
+                || !Objects.equals(first.currency(), second.currency())) {
+            return false;
+        }
+        Map<TokenType, BigDecimal> firstRates = first.rates();
+        Map<TokenType, BigDecimal> secondRates = second.rates();
+        if (firstRates == null || secondRates == null) {
+            return firstRates == secondRates;
+        }
+        if (!firstRates.keySet().equals(secondRates.keySet())) {
+            return false;
+        }
+        return firstRates.entrySet().stream().allMatch(entry ->
+                entry.getValue().compareTo(secondRates.get(entry.getKey())) == 0
+        );
+    }
+
+    /**
+     * {@link #hasSameBillingTerms(PricingSnapshot)}와 일치하는 bounded hash code입니다.
+     */
+    public int billingTermsHashCode() {
+        int result = Objects.hash(modelId, pricingPolicyId, catalogVersion, currency);
+        if (rates == null) {
+            return result;
+        }
+        for (TokenType tokenType : TokenType.values()) {
+            BigDecimal rate = rates.get(tokenType);
+            if (rate != null) {
+                result = 31 * result + Objects.hash(
+                        tokenType,
+                        rate.stripTrailingZeros()
+                );
+            }
+        }
+        return result;
+    }
 }

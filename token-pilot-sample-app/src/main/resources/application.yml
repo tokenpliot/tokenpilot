@@ -21,5 +21,5 @@ token-pilot:
           COMPLETION: 0.00060
   metrics:
     enabled: true
-    tag-whitelist:
-      - tenant_id
+    legacy-ai-token-metrics-enabled: false
+    tag-whitelist: []

@@ -76,4 +76,35 @@ class PricingSnapshotTest {
 
         assertThat(snapshot.rates()).isEmpty();
     }
+
+    @Test
+    @DisplayName("멱등성 비교는 조회 시각과 decimal scale을 가격 책임에서 제외해야 한다")
+    void comparesBillingTermsWithoutObservationMetadata() {
+        PricingSnapshot first = new PricingSnapshot(
+                "gpt-4o",
+                "standard",
+                "catalog-v1",
+                Instant.parse("2026-07-30T00:00:00Z"),
+                Map.of(
+                        TokenType.PROMPT, new BigDecimal("0.010"),
+                        TokenType.COMPLETION, new BigDecimal("0.030")
+                ),
+                Currency.getInstance("USD")
+        );
+        PricingSnapshot second = new PricingSnapshot(
+                "gpt-4o",
+                "standard",
+                "catalog-v1",
+                Instant.parse("2026-07-30T00:01:00Z"),
+                Map.of(
+                        TokenType.PROMPT, new BigDecimal("0.01"),
+                        TokenType.COMPLETION, new BigDecimal("0.03")
+                ),
+                Currency.getInstance("USD")
+        );
+
+        assertThat(first.hasSameBillingTerms(second)).isTrue();
+        assertThat(first.billingTermsHashCode())
+                .isEqualTo(second.billingTermsHashCode());
+    }
 }

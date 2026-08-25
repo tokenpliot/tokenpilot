@@ -43,13 +43,11 @@ class MicroCostMetricsPublisherTest {
         assertThat(meterRegistry.find("ai.token.usage.total")
                 .tag("model", "gpt-4o")
                 .tag("token_type", "prompt")
-                .tag("tenant_id", "tenant-1")
                 .counter().count()).isEqualTo(100.0);
 
         assertThat(meterRegistry.find("ai.token.usage.total")
                 .tag("model", "gpt-4o")
                 .tag("token_type", "completion")
-                .tag("tenant_id", "tenant-1")
                 .counter().count()).isEqualTo(200.0);
 
         // Then: 토큰 사용량 분포(Summary) 확인
@@ -61,7 +59,6 @@ class MicroCostMetricsPublisherTest {
         // Then: 비용 카운터 확인
         var costCounter = meterRegistry.find("ai.token.cost.total")
                 .tag("model", "gpt-4o")
-                .tag("tenant_id", "tenant-1")
                 .tag("currency", "USD")
                 .counter();
 
@@ -71,13 +68,14 @@ class MicroCostMetricsPublisherTest {
 
         var promptSummary = meterRegistry.find("ai.token.usage.distribution")
                 .tag("model", "gpt-4o")
-                .tag("tenant_id", "tenant-1")
                 .tag("token_type", "prompt")
                 .summary();
 
         assertThat(promptSummary.getId().getDescription())
                 .isEqualTo("Distribution of AI token usage per recorded model call");
         assertThat(promptSummary.getId().getBaseUnit()).isEqualTo("tokens");
+        assertThat(costCounter.getId().getTag("tenant_id"))
+                .isEqualTo("tenant-1");
     }
 
     @Test
@@ -171,5 +169,59 @@ class MicroCostMetricsPublisherTest {
                 .tag("model", "gpt-4o")
                 .tag("currency", "USD")
                 .counter()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("기본 MetricsOptions는 사용자 태그와 legacy meter를 비활성화해야 한다")
+    void shouldUseSafeDefaults() {
+        MetricsOptions options = MetricsOptions.defaults();
+
+        assertThat(options.allowedTagKeys()).isEmpty();
+        assertThat(options.legacyAiTokenMetricsEnabled()).isFalse();
+    }
+
+    @Test
+    @DisplayName("legacy 비활성 options를 사용하면 ai.token meter를 발행하지 않아야 한다")
+    void shouldNotPublishLegacyMetricsWhenDisabled() {
+        publisher = new MicroCostMetricsPublisher(
+                meterRegistry,
+                MetricsOptions.defaults()
+        );
+
+        publisher.onRecord(new CostRecordedEvent(
+                "gpt-4o",
+                TokenUsage.from(100, 200),
+                new Cost(new BigDecimal("0.5"), Currency.getInstance("USD")),
+                Map.of("tenant_id", "tenant-1")
+        ));
+
+        assertThat(meterRegistry.find("ai.token.usage.total").meter()).isNull();
+        assertThat(meterRegistry.find("ai.token.usage.distribution").meter()).isNull();
+        assertThat(meterRegistry.find("ai.token.cost.total").meter()).isNull();
+    }
+
+    @Test
+    @DisplayName("1-arg MetricsOptions 생성자는 기존 직접 생성의 legacy opt-in을 유지해야 한다")
+    void shouldPreserveOneArgumentOptionsCompatibility() {
+        MetricsOptions options = new MetricsOptions(Set.of("tenant_id"));
+
+        assertThat(options.allowedTagKeys()).containsExactly("tenant_id");
+        assertThat(options.legacyAiTokenMetricsEnabled()).isTrue();
+    }
+
+    @Test
+    @DisplayName("기존 direct 기본 생성자는 tenant_id 허용 동작을 유지해야 한다")
+    void shouldPreserveDirectPublisherDefaultTagCompatibility() {
+        publisher.onRecord(new CostRecordedEvent(
+                "gpt-4o",
+                TokenUsage.from(1, 1),
+                Cost.of(new BigDecimal("0.1"), Currency.getInstance("USD")),
+                Map.of("tenant_id", "tenant-legacy", "user_id", "user-sensitive")
+        ));
+
+        var counter = meterRegistry.get("ai.token.cost.total")
+                .tag("tenant_id", "tenant-legacy")
+                .counter();
+        assertThat(counter.getId().getTag("user_id")).isNull();
     }
 }

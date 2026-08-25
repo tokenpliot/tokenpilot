@@ -14,7 +14,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ChatClientBuilderCustomizerTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(TokenPilotAutoConfiguration.class));
+            .withConfiguration(AutoConfigurations.of(
+                    TokenPilotAutoConfiguration.class,
+                    TokenPilotSpringAiAutoConfiguration.class
+            ));
 
     @Test
     @DisplayName("Advisor가 존재할 때 ChatClementCustomizer를 등록해야 합니다.")

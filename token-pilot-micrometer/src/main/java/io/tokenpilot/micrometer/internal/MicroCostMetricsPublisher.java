@@ -10,7 +10,9 @@ import io.tokenpilot.core.domain.CostRecordedEvent;
 import io.tokenpilot.core.domain.TokenType;
 import io.tokenpilot.micrometer.MetricsOptions;
 
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -22,9 +24,10 @@ public class MicroCostMetricsPublisher implements LedgerListener {
 
     private final MeterRegistry meterRegistry;
     private final Set<String> allowedTagKeys;
+    private final boolean enabled;
 
     public MicroCostMetricsPublisher(MeterRegistry meterRegistry) {
-        this(meterRegistry, MetricsOptions.defaults());
+        this(meterRegistry, MetricsOptions.legacyDefaults());
     }
 
     public MicroCostMetricsPublisher(MeterRegistry meterRegistry, Set<String> allowedTagKeys) {
@@ -32,13 +35,23 @@ public class MicroCostMetricsPublisher implements LedgerListener {
     }
 
     public MicroCostMetricsPublisher(MeterRegistry meterRegistry, MetricsOptions options) {
-        this.meterRegistry = meterRegistry;
-        MetricsOptions resolvedOptions = (options != null) ? options : MetricsOptions.defaults();
+        this.meterRegistry = Objects.requireNonNull(
+                meterRegistry,
+                "meterRegistry must not be null"
+        );
+        MetricsOptions resolvedOptions = (options != null)
+                ? options
+                : MetricsOptions.legacyDefaults();
         this.allowedTagKeys = resolvedOptions.allowedTagKeys();
+        this.enabled = resolvedOptions.legacyAiTokenMetricsEnabled();
     }
 
     @Override
     public void onRecord(CostRecordedEvent event) {
+        if (!enabled) {
+            return;
+        }
+        Objects.requireNonNull(event, "event must not be null");
         Tags commonTags = Tags.of("model", event.modelId())
                 .and(allowedTags(event.tags()));
 
@@ -47,7 +60,7 @@ public class MicroCostMetricsPublisher implements LedgerListener {
         for (TokenType tokenType : TokenType.values()) {
             long count = event.usage().getCount(tokenType);
             if (count > 0) {
-                String typeName = tokenType.name().toLowerCase();
+                String typeName = tokenType.name().toLowerCase(Locale.ROOT);
                 DistributionSummary.builder("ai.token.usage.distribution")
                         .description("Distribution of AI token usage per recorded model call")
                         .baseUnit("tokens")

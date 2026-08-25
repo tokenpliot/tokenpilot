@@ -17,9 +17,10 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 현재 구현이 지원하는 snapshot은 확정 비용과 후보 비용입니다.
+ * 이 evaluator는 부수 효과 없는 policy projection만 담당합니다.
  * {@code projectedUsage = committedUsage + candidateCost}이며 active reservation과
- * reconciliation liability는 #36, #37에서 추가됩니다.
+ * reconciliation liability는 {@link BudgetStateStore#snapshot}과 원자적 reservation
+ * store가 별도로 반영합니다.
  */
 public class DefaultBudgetEvaluator implements BudgetEvaluator {
 

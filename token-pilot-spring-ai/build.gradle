@@ -1,12 +1,15 @@
 dependencies {
-    api project(':token-pilot-core')
-    implementation project(':token-pilot-budget')
+    api platform('org.springframework.boot:spring-boot-dependencies:4.1.0')
+    api platform('org.springframework.ai:spring-ai-bom:2.0.0')
 
-    implementation 'org.springframework.ai:spring-ai-model'
-    implementation 'org.springframework.ai:spring-ai-client-chat'
+    api project(':token-pilot-core')
+    api project(':token-pilot-budget')
+
+    api 'org.springframework.ai:spring-ai-model'
+    api 'org.springframework.ai:spring-ai-client-chat'
     
     // Reactor (스트리밍 처리를 위한 Flux 등)
-    implementation 'io.projectreactor:reactor-core'
+    api 'io.projectreactor:reactor-core'
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'

@@ -1,14 +1,17 @@
 package io.tokenpilot.core.internal;
 
 import io.tokenpilot.core.ModelRegistry;
+import io.tokenpilot.core.PreflightDecisionListener;
 import io.tokenpilot.core.TokenBudget;
 import io.tokenpilot.core.domain.AdmissionReason;
 import io.tokenpilot.core.domain.AdmissionStatus;
 import io.tokenpilot.core.domain.BudgetResult;
 import io.tokenpilot.core.domain.ModelDefinition;
+import io.tokenpilot.core.domain.PreflightDecisionEvent;
 import io.tokenpilot.core.domain.TokenCountResult;
 import io.tokenpilot.core.domain.TokenCountScope;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -19,9 +22,20 @@ import java.util.OptionalLong;
 final class DefaultTokenBudget implements TokenBudget {
 
     private final ModelRegistry modelRegistry;
+    private final List<PreflightDecisionListener> listeners;
 
     DefaultTokenBudget(ModelRegistry modelRegistry) {
+        this(modelRegistry, List.of());
+    }
+
+    DefaultTokenBudget(
+            ModelRegistry modelRegistry,
+            List<PreflightDecisionListener> listeners
+    ) {
         this.modelRegistry = Objects.requireNonNull(modelRegistry, "modelRegistry must not be null");
+        this.listeners = List.copyOf(
+                Objects.requireNonNull(listeners, "listeners must not be null")
+        );
     }
 
     @Override
@@ -146,7 +160,7 @@ final class DefaultTokenBudget implements TokenBudget {
             OptionalLong maxContextTokens,
             OptionalLong remainingTokens
     ) {
-        return new BudgetResult(
+        BudgetResult result = new BudgetResult(
                 status,
                 reason,
                 canonicalModelId,
@@ -158,5 +172,21 @@ final class DefaultTokenBudget implements TokenBudget {
                 input.estimatorDescriptor(),
                 input.tokenizationBasis()
         );
+        publishBestEffort(result);
+        return result;
+    }
+
+    private void publishBestEffort(BudgetResult result) {
+        if (listeners.isEmpty()) {
+            return;
+        }
+        PreflightDecisionEvent event = new PreflightDecisionEvent(result);
+        for (PreflightDecisionListener listener : listeners) {
+            try {
+                listener.onDecision(event);
+            } catch (RuntimeException ignored) {
+                // Optional observers do not change a completed admission decision.
+            }
+        }
     }
 }
