@@ -438,6 +438,7 @@ Stage and deploy a Central release:
 
 ### 2026-08-25
 
+- Added the public quickstart, configuration, metrics, sample runbook, release procedure, MVP cutline, and post-MVP evolution documents; kept `0.0.1-SNAPSHOT` as the default and reserved `0.1.0` for explicit staging/release verification.
 - Connected supported Spring AI 2.0 non-streaming `ChatClient` requests to text-scope adaptation, model/output resolution, conservative preflight, atomic reservation, in-flight tracking, provider usage extraction, and `ReservationAccounting` reconciliation in one around-call lifecycle.
 - Added namespaced request correlation without `ThreadLocal`, generated-or-reused idempotency keys, provider-specific reserved-output resolution, configurable framing headroom, and fail-closed media/tool/structured-output scope handling.
 - Placed Token Pilot immediately before the terminal model Advisor, rejected enforcement-enabled streaming before reservation/provider invocation, and preserved the budget-disabled ledger-only compatibility path.

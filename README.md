@@ -57,6 +57,15 @@ Spring AI `ChatClient` calls, TokenPilot now performs conservative preflight,
 claims one provider dispatch, and reconciles provider-reported actual usage
 against the reservation-time pricing snapshot.
 
+## Documentation
+
+- [10-minute quickstart](docs/QUICKSTART.md) — choose Core or Starter and run the first verification path.
+- [Configuration reference](docs/CONFIGURATION.md) — properties, defaults, conditions, and failure modes.
+- [Metrics reference](docs/METRICS.md) — Token Pilot-owned meters and legacy compatibility policy.
+- [Sample app runbook](docs/SAMPLE_RUNBOOK.md) — local app, Prometheus, Grafana, and troubleshooting commands.
+- [Release procedure](docs/RELEASE.md) — staging, signing, external consumer, and Central Portal gates.
+- [30-day MVP cutline](docs/30_DAY_MVP_REPORT.md) and [post-MVP evolution plan](docs/EVOLUTION_PLAN.md).
+
 ## Micrometer metrics
 
 When a `MeterRegistry` is available, the Spring Boot starter publishes
