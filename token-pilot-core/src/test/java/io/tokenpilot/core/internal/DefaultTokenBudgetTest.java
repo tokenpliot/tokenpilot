@@ -1,11 +1,13 @@
 package io.tokenpilot.core.internal;
 
+import io.tokenpilot.core.CoreComponents;
 import io.tokenpilot.core.ModelRegistry;
 import io.tokenpilot.core.TokenBudget;
 import io.tokenpilot.core.domain.AdmissionReason;
 import io.tokenpilot.core.domain.AdmissionStatus;
 import io.tokenpilot.core.domain.BudgetResult;
 import io.tokenpilot.core.domain.ModelDefinition;
+import io.tokenpilot.core.domain.PreflightDecisionEvent;
 import io.tokenpilot.core.domain.TokenCountAccuracy;
 import io.tokenpilot.core.domain.TokenCountResult;
 import io.tokenpilot.core.domain.TokenCountScope;
@@ -18,6 +20,8 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -158,6 +162,49 @@ class DefaultTokenBudgetTest {
         assertThatThrownBy(() -> budget.requireFits("model-v1", textOnly(1, 1), 0))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("INCOMPLETE_SCOPE");
+    }
+
+    @Test
+    @DisplayName("모든 admission 결과를 immutable event로 한 번씩 발행한다")
+    void publishesEveryAdmissionResultOnce() {
+        List<PreflightDecisionEvent> events = new CopyOnWriteArrayList<>();
+        TokenBudget observed = CoreComponents.tokenBudget(
+                registry,
+                List.of(events::add)
+        );
+
+        BudgetResult fits = observed.check("model-v1", request(6, 6), 4);
+        BudgetResult exceeds = observed.check("model-v1", request(6, 6), 5);
+        BudgetResult indeterminate = observed.check("unknown", request(1, 1), 0);
+
+        assertThat(events).containsExactly(
+                new PreflightDecisionEvent(fits),
+                new PreflightDecisionEvent(exceeds),
+                new PreflightDecisionEvent(indeterminate)
+        );
+    }
+
+    @Test
+    @DisplayName("한 preflight listener 실패가 결과나 다음 listener를 바꾸지 않는다")
+    void isolatesPreflightListenerFailures() {
+        AtomicInteger failedDeliveries = new AtomicInteger();
+        List<PreflightDecisionEvent> received = new CopyOnWriteArrayList<>();
+        TokenBudget observed = LedgerComponents.tokenBudget(
+                registry,
+                List.of(
+                        event -> {
+                            failedDeliveries.incrementAndGet();
+                            throw new IllegalStateException("listener failed");
+                        },
+                        received::add
+                )
+        );
+
+        BudgetResult result = observed.check("model-v1", request(6, 6), 4);
+
+        assertThat(result.status()).isEqualTo(AdmissionStatus.FITS);
+        assertThat(failedDeliveries).hasValue(1);
+        assertThat(received).containsExactly(new PreflightDecisionEvent(result));
     }
 
     private static TokenCountResult request(long tokens, long safeUpperBound) {

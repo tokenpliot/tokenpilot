@@ -5,8 +5,10 @@ import io.tokenpilot.budget.BudgetPolicy;
 import io.tokenpilot.budget.BudgetStateStore;
 import io.tokenpilot.budget.ReservationAccounting;
 import io.tokenpilot.budget.ReservationAccountingListener;
+import io.tokenpilot.budget.ReservationAccountingListenerErrorHandler;
 import io.tokenpilot.budget.ReservationId;
 import io.tokenpilot.core.CostCalculator;
+import io.tokenpilot.core.internal.LedgerComponents;
 
 import java.time.Clock;
 import java.util.List;
@@ -23,6 +25,47 @@ public final class LedgerBudgetComponents {
 
     public static BudgetStateStore inMemoryBudgetStateStore() {
         return new InMemoryBudgetStateStore();
+    }
+
+    /** PR #68 accounting/notification listener 연결과 호환되는 convenience factory입니다. */
+    public static BudgetStateStore inMemoryBudgetStateStore(
+        List<ReservationAccountingListener> accountingListeners
+    ) {
+        return new InMemoryBudgetStateStore(
+            Clock.systemUTC(),
+            ReservationId::random,
+            LedgerComponents.defaultCostCalculator(),
+            accountingListeners
+        );
+    }
+
+    /** listener 실패 관측 hook까지 연결하는 convenience factory입니다. */
+    public static BudgetStateStore inMemoryBudgetStateStore(
+        List<ReservationAccountingListener> accountingListeners,
+        List<ReservationAccountingListenerErrorHandler> listenerErrorHandlers
+    ) {
+        return new InMemoryBudgetStateStore(
+            Clock.systemUTC(),
+            ReservationId::random,
+            LedgerComponents.defaultCostCalculator(),
+            accountingListeners,
+            listenerErrorHandlers
+        );
+    }
+
+    /** Spring 등 DI container가 listener를 store 생성 뒤 지연 해석할 수 있는 factory입니다. */
+    public static BudgetStateStore inMemoryBudgetStateStore(
+        Supplier<List<ReservationAccountingListener>> accountingListenerSupplier,
+        Supplier<List<ReservationAccountingListenerErrorHandler>>
+            listenerErrorHandlerSupplier
+    ) {
+        return new InMemoryBudgetStateStore(
+            Clock.systemUTC(),
+            ReservationId::random,
+            LedgerComponents.defaultCostCalculator(),
+            accountingListenerSupplier,
+            listenerErrorHandlerSupplier
+        );
     }
 
     public static BudgetStateStore inMemoryBudgetStateStore(
@@ -55,6 +98,22 @@ public final class LedgerBudgetComponents {
             reservationIdGenerator,
             costCalculator,
             accountingListeners
+        );
+    }
+
+    public static BudgetStateStore inMemoryBudgetStateStore(
+        Clock clock,
+        Supplier<ReservationId> reservationIdGenerator,
+        CostCalculator costCalculator,
+        List<ReservationAccountingListener> accountingListeners,
+        List<ReservationAccountingListenerErrorHandler> listenerErrorHandlers
+    ) {
+        return new InMemoryBudgetStateStore(
+            clock,
+            reservationIdGenerator,
+            costCalculator,
+            accountingListeners,
+            listenerErrorHandlers
         );
     }
 

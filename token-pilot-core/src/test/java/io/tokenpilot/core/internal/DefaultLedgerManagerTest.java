@@ -132,4 +132,40 @@ class DefaultLedgerManagerTest {
                 event.cost().equals(cost)
         ));
     }
+
+    @Test
+    @DisplayName("한 리스너의 RuntimeException은 비용 결과와 다음 리스너 호출에 영향을 주지 않아야 한다")
+    void shouldIsolateListenerRuntimeExceptionAndContinuePublishing() {
+        PricingPlan plan = new PricingPlan(
+                "gpt-4o",
+                new BigDecimal("5.0"),
+                new BigDecimal("15.0")
+        );
+        registry.registerPlan(plan);
+        LedgerListener failingListener = mock(LedgerListener.class);
+        LedgerListener succeedingListener = mock(LedgerListener.class);
+        DefaultLedgerManager isolatedManager = new DefaultLedgerManager(
+                registry,
+                calculator,
+                List.of(failingListener, succeedingListener)
+        );
+        TokenUsage usage = TokenUsage.from(1_000, 1_000);
+        doThrow(new IllegalStateException("listener failed"))
+                .when(failingListener)
+                .onRecord(any(CostRecordedEvent.class));
+
+        Cost cost = isolatedManager.record("gpt-4o", usage, Map.of());
+
+        assertThat(cost).isEqualTo(Cost.of(
+                new BigDecimal("20.000000"),
+                Currency.getInstance("USD")
+        ));
+        var inOrder = inOrder(failingListener, succeedingListener);
+        inOrder.verify(failingListener).onRecord(any(CostRecordedEvent.class));
+        inOrder.verify(succeedingListener).onRecord(argThat(event ->
+                event.modelId().equals("gpt-4o")
+                        && event.usage().equals(usage)
+                        && event.cost().equals(cost)
+        ));
+    }
 }

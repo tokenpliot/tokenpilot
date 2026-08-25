@@ -80,7 +80,13 @@ class DefaultLedgerManager implements LedgerManager {
         // 이벤트 발행 (리스너들에게 전파)
         if (!listeners.isEmpty()) {
             CostRecordedEvent event = new CostRecordedEvent(modelId, usage, cost, tags);
-            listeners.forEach(listener -> listener.onRecord(event));
+            for (LedgerListener listener : listeners) {
+                try {
+                    listener.onRecord(event);
+                } catch (RuntimeException ignored) {
+                    // Optional observers do not change an already calculated ledger result.
+                }
+            }
         }
     }
 }

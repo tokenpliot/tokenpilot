@@ -53,6 +53,9 @@ public class SampleController {
                 "ledgerManager", applicationContext.containsBean("ledgerManager"),
                 "ledgerAdvisor", applicationContext.containsBean("ledgerAdvisor"),
                 "pricingRegistry", applicationContext.containsBean("pricingRegistry"),
+                "tokenPilotCoreMetricsPublisher", applicationContext.containsBean("tokenPilotCoreMetricsPublisher"),
+                "tokenPilotBudgetMetricsPublisher", applicationContext.containsBean("tokenPilotBudgetMetricsPublisher"),
+                "tokenPilotNotificationMetricsPublisher", applicationContext.containsBean("tokenPilotNotificationMetricsPublisher"),
                 "microCostMetricsPublisher", applicationContext.containsBean("microCostMetricsPublisher"),
                 "budgetEvaluator", applicationContext.containsBean("budgetEvaluator"),
                 "budgetStateStore", applicationContext.containsBean("budgetStateStore")

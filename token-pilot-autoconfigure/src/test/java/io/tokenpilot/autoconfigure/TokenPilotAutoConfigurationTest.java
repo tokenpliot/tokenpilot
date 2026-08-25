@@ -2,18 +2,30 @@ package io.tokenpilot.autoconfigure;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.tokenpilot.budget.ActualUsageCommand;
 import io.tokenpilot.budget.BudgetDecision;
 import io.tokenpilot.budget.BudgetEvaluator;
 import io.tokenpilot.budget.BudgetKey;
+import io.tokenpilot.budget.BudgetReservationRequest;
+import io.tokenpilot.budget.BudgetReservationResult;
 import io.tokenpilot.budget.BudgetState;
 import io.tokenpilot.budget.BudgetStateStore;
 import io.tokenpilot.budget.BudgetThreshold;
 import io.tokenpilot.budget.BudgetWindow;
+import io.tokenpilot.budget.IdempotencyKey;
+import io.tokenpilot.budget.ReservationAccounting;
+import io.tokenpilot.budget.ReservationAccountingEvent;
+import io.tokenpilot.budget.ReservationAccountingListener;
+import io.tokenpilot.budget.ReservationId;
+import io.tokenpilot.budget.ReservationTokenEstimate;
 import io.tokenpilot.core.CostCalculator;
 import io.tokenpilot.core.LedgerManager;
+import io.tokenpilot.core.ModelRegistry;
 import io.tokenpilot.core.PricingEvaluator;
 import io.tokenpilot.core.PricingProvider;
 import io.tokenpilot.core.PricingRegistry;
+import io.tokenpilot.core.TokenBudget;
+import io.tokenpilot.core.TokenEstimator;
 import io.tokenpilot.core.domain.Cost;
 import io.tokenpilot.core.domain.PricingPlan;
 import io.tokenpilot.core.domain.PricingReconciliationResult;
@@ -22,6 +34,10 @@ import io.tokenpilot.core.domain.PricingSnapshot;
 import io.tokenpilot.core.domain.TokenType;
 import io.tokenpilot.core.domain.TokenUsage;
 import io.tokenpilot.core.exception.MissingPricingException;
+import io.tokenpilot.micrometer.internal.BudgetMetricsPublisher;
+import io.tokenpilot.micrometer.internal.CoreMetricsPublisher;
+import io.tokenpilot.micrometer.internal.MicroCostMetricsPublisher;
+import io.tokenpilot.micrometer.internal.NotificationMetricsPublisher;
 import io.tokenpilot.notification.BudgetNotificationHandler;
 import io.tokenpilot.notification.BudgetNotificationService;
 import io.tokenpilot.notification.NotificationStateStore;
@@ -34,10 +50,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.ai.chat.client.ChatClientRequest;
+import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.client.advisor.api.AdvisorChain;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -49,6 +67,7 @@ import java.time.ZoneOffset;
 import java.util.Currency;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static io.tokenpilot.core.domain.TokenType.COMPLETION;
@@ -68,7 +87,15 @@ class TokenPilotAutoConfigurationTest {
     private static final String PROP_CURRENCY = PREFIX + ".currency";
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(TokenPilotAutoConfiguration.class));
+        .withConfiguration(AutoConfigurations.of(
+            TokenPilotAutoConfiguration.class,
+            TokenPilotCoreMetricsAutoConfiguration.class,
+            TokenPilotBudgetMetricsAutoConfiguration.class,
+            TokenPilotNotificationMetricsAutoConfiguration.class,
+            TokenPilotBudgetAutoConfiguration.class,
+            TokenPilotSpringAiAutoConfiguration.class,
+            TokenPilotNotificationAutoConfiguration.class
+        ));
 
     @Test
     @DisplayName("기본 설정에서 Core 및 Spring AI 빈은 등록되고, Budget 빈은 등록되지 않아야 한다")
@@ -78,6 +105,9 @@ class TokenPilotAutoConfigurationTest {
             assertThat(context).hasSingleBean(PricingRegistry.class);
             assertThat(context).hasSingleBean(CostCalculator.class);
             assertThat(context).hasSingleBean(PricingEvaluator.class);
+            assertThat(context).hasSingleBean(ModelRegistry.class);
+            assertThat(context).hasSingleBean(TokenEstimator.class);
+            assertThat(context).hasSingleBean(TokenBudget.class);
             assertThat(context).hasSingleBean(LedgerManager.class);
 
             assertThat(context).hasSingleBean(UsageExtractor.class);
@@ -88,7 +118,38 @@ class TokenPilotAutoConfigurationTest {
             assertThat(context).doesNotHaveBean(BudgetEvaluator.class);
             assertThat(context).doesNotHaveBean(NotificationStateStore.class);
             assertThat(context).doesNotHaveBean(BudgetNotificationService.class);
+            assertThat(context).doesNotHaveBean(CoreMetricsPublisher.class);
+            assertThat(context).doesNotHaveBean(BudgetMetricsPublisher.class);
+            assertThat(context).doesNotHaveBean(NotificationMetricsPublisher.class);
         });
+    }
+
+    @Test
+    @DisplayName("선택 adapter 모듈이 없어도 core 자동 설정은 시작되어야 한다")
+    void shouldStartCoreOnlyWithoutOptionalAdapterModules() {
+        this.contextRunner
+            .withClassLoader(new FilteredClassLoader(
+                "io.tokenpilot.budget",
+                "io.tokenpilot.notification",
+                "io.tokenpilot.springai",
+                "io.tokenpilot.micrometer",
+                "org.springframework.ai",
+                "io.micrometer"
+            ))
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                assertThat(context).hasSingleBean(PricingProvider.class);
+                assertThat(context).hasSingleBean(PricingRegistry.class);
+                assertThat(context).hasSingleBean(CostCalculator.class);
+                assertThat(context).hasSingleBean(ModelRegistry.class);
+                assertThat(context).hasSingleBean(TokenEstimator.class);
+                assertThat(context).hasSingleBean(TokenBudget.class);
+                assertThat(context).hasSingleBean(LedgerManager.class);
+                assertThat(context).doesNotHaveBean("ledgerAdvisor");
+                assertThat(context).doesNotHaveBean("budgetStateStore");
+                assertThat(context).doesNotHaveBean("notificationStateStore");
+                assertThat(context).doesNotHaveBean("tokenPilotCoreMetricsPublisher");
+            });
     }
 
     @Test
@@ -136,6 +197,33 @@ class TokenPilotAutoConfigurationTest {
                         assertThat(resolvedSnapshot.currency())
                             .isEqualTo(Currency.getInstance("USD"));
                     });
+            });
+    }
+
+    @Test
+    @DisplayName("pricing miss는 advisor에서 Token Pilot 고유 meter로 연결되어야 한다")
+    void shouldPublishPricingMissingMetricFromAdvisor() {
+        this.contextRunner
+            .withUserConfiguration(MeterRegistryConfiguration.class)
+            .run(context -> {
+                LedgerAdvisor advisor = context.getBean(LedgerAdvisor.class);
+                ChatClientRequest request = new ChatClientRequest(
+                    new Prompt(
+                        "test",
+                        ChatOptions.builder().model("missing-model").build()
+                    ),
+                    Map.of()
+                );
+
+                advisor.before(request, mock(AdvisorChain.class));
+
+                MeterRegistry registry = context.getBean(MeterRegistry.class);
+                assertThat(registry.get("tokenpilot.pricing.missing")
+                    .tag("policy", "fail_open")
+                    .counter()
+                    .count()).isEqualTo(1.0);
+                assertThat(registry.get("tokenpilot.pricing.missing")
+                    .counter().getId().getTag("model")).isNull();
             });
     }
 
@@ -252,6 +340,120 @@ class TokenPilotAutoConfigurationTest {
     }
 
     @Test
+    @DisplayName("BudgetStateStore를 의존하는 listener도 순환 참조 없이 지연 연결되어야 한다")
+    void shouldLazilyResolveStoreDependentAccountingListener() {
+        this.contextRunner
+            .withUserConfiguration(StoreDependentAccountingListenerConfiguration.class)
+            .withPropertyValues("token-pilot.budget.enabled=true")
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                BudgetStateStore stateStore = context.getBean(BudgetStateStore.class);
+                StoreDependentAccountingListener listener = context.getBean(
+                    StoreDependentAccountingListener.class
+                );
+                Currency usd = Currency.getInstance("USD");
+                Cost limit = Cost.of(new BigDecimal("10.00"), usd);
+                BudgetKey key = new BudgetKey(
+                    "policy-a",
+                    "tenant",
+                    "tenant-a",
+                    BudgetWindow.parse("2026-08")
+                );
+
+                stateStore.checkAndReserve(new BudgetReservationRequest(
+                    key,
+                    limit,
+                    Cost.of(BigDecimal.ONE, usd),
+                    "request-lazy",
+                    new IdempotencyKey("dedupe-lazy"),
+                    null,
+                    null,
+                    null,
+                    Optional.empty(),
+                    Optional.empty()
+                ));
+
+                assertThat(listener.stateStore()).isSameAs(stateStore);
+                assertThat(listener.evaluations()).isEqualTo(1);
+            });
+    }
+
+    @Test
+    @DisplayName("자동 설정 budget store가 reservation, commit, listener failure metric을 연결해야 한다")
+    void shouldWireBudgetAccountingMetricsIntoAutoConfiguredStore() {
+        this.contextRunner
+            .withUserConfiguration(
+                MeterRegistryConfiguration.class,
+                FailingAccountingListenerConfiguration.class
+            )
+            .withPropertyValues(
+                "token-pilot.budget.enabled=true",
+                "token-pilot.budget.monthly-limit=100.00"
+            )
+            .run(context -> {
+                Currency usd = Currency.getInstance("USD");
+                BudgetKey key = new BudgetKey(
+                    "policy-a",
+                    "tenant",
+                    "tenant-a",
+                    BudgetWindow.parse("2026-08")
+                );
+                Cost limit = Cost.of(new BigDecimal("100.00"), usd);
+                PricingSnapshot snapshot = new PricingSnapshot(
+                    "gpt-4o-mini",
+                    "pricing-v1",
+                    "catalog-v1",
+                    Instant.parse("2026-08-25T00:00:00Z"),
+                    Map.of(
+                        PROMPT, new BigDecimal("0.001"),
+                        COMPLETION, new BigDecimal("0.002")
+                    ),
+                    usd
+                );
+                BudgetReservationRequest request = new BudgetReservationRequest(
+                    key,
+                    limit,
+                    Cost.of(new BigDecimal("1.00"), usd),
+                    "request-a",
+                    new IdempotencyKey("dedupe-a"),
+                    snapshot,
+                    new ReservationTokenEstimate(100, 120, 50)
+                );
+                BudgetStateStore stateStore = context.getBean(BudgetStateStore.class);
+                ReservationAccounting accounting = (ReservationAccounting) stateStore;
+
+                BudgetReservationResult reservation = stateStore.checkAndReserve(request);
+                ReservationId reservationId = reservation.reservationId();
+                accounting.markInFlight(reservationId);
+                ActualUsageCommand command = new ActualUsageCommand(
+                    "request-a",
+                    "attempt-a",
+                    reservationId,
+                    TokenUsage.from(110, 60),
+                    "gpt-4o-mini"
+                );
+                var applied = accounting.commit(command);
+                var reused = accounting.commit(command);
+
+                MeterRegistry registry = context.getBean(MeterRegistry.class);
+                assertThat(applied.transition().status().isApplied()).isTrue();
+                assertThat(reused.transition().status().isApplied()).isFalse();
+                assertThat(registry.get("tokenpilot.budget.reservations")
+                    .tag("state", "created").counter().count()).isEqualTo(1.0);
+                assertThat(registry.get("tokenpilot.cost.total")
+                    .tag("currency", "USD").counter().count()).isEqualTo(0.00023);
+                assertThat(registry.get("tokenpilot.reconciliation.outcomes")
+                    .tag("outcome", "committed").counter().count()).isEqualTo(1.0);
+                assertThat(registry.get("tokenpilot.listener.failures")
+                    .tags("listener", "custom", "phase", "reservation_evaluated")
+                    .counter().count()).isEqualTo(1.0);
+                assertThat(registry.get("tokenpilot.listener.failures")
+                    .tags("listener", "custom", "phase", "accounting_applied")
+                    .counter().count()).isEqualTo(1.0);
+            });
+    }
+
+    @Test
     @DisplayName("Budget 빈은 사용자 Clock 기준의 월별 window를 공유해야 한다")
     void shouldUseUserClockForMonthlyBudgetWindow() {
         this.contextRunner
@@ -352,6 +554,63 @@ class TokenPilotAutoConfigurationTest {
     }
 
     @Test
+    @DisplayName("BudgetEvaluator만 있으면 advisor는 budget graph를 비활성화하고 FAIL_OPEN을 사용해야 한다")
+    void shouldNormalizeEvaluatorOnlyBudgetGraphToFailOpen() {
+        this.contextRunner
+            .withUserConfiguration(RecordingBudgetEvaluatorConfiguration.class)
+            .run(context -> {
+                LedgerAdvisor advisor = context.getBean(LedgerAdvisor.class);
+                RecordingBudgetEvaluator evaluator = context.getBean(
+                    RecordingBudgetEvaluator.class
+                );
+                ChatClientRequest request = new ChatClientRequest(
+                    new Prompt(
+                        "test",
+                        ChatOptions.builder().model("missing-model").build()
+                    ),
+                    Map.of()
+                );
+
+                ChatClientRequest resolved = advisor.before(
+                    request,
+                    mock(AdvisorChain.class)
+                );
+
+                assertThat(evaluator.evaluateCalls()).isZero();
+                assertThat(resolved.context().values())
+                    .contains(PricingResolution.MISSING_PLAN);
+            });
+    }
+
+    @Test
+    @DisplayName("BudgetStateStore만 있으면 advisor는 budget graph를 비활성화하고 FAIL_OPEN을 사용해야 한다")
+    void shouldNormalizeStoreOnlyBudgetGraphToFailOpen() {
+        this.contextRunner
+            .withUserConfiguration(StoreOnlyBudgetConfiguration.class)
+            .withPropertyValues(buildProperties(
+                "gpt-4o",
+                "0.005",
+                "0.015",
+                "USD"
+            ))
+            .run(context -> {
+                LedgerAdvisor advisor = context.getBean(LedgerAdvisor.class);
+                ChatClientResponse response = mock(ChatClientResponse.class);
+                when(response.context()).thenReturn(Map.of(
+                    "tokenpilot.model.id",
+                    "gpt-4o"
+                ));
+
+                ChatClientResponse result = advisor.after(
+                    response,
+                    mock(AdvisorChain.class)
+                );
+
+                assertThat(result).isSameAs(response);
+            });
+    }
+
+    @Test
     @DisplayName("token-pilot.budget.enabled=false 일 때 Budget 관련 빈이 등록되지 않아야 한다")
     void shouldNotRegisterBudgetBeansWhenDisabled() {
         this.contextRunner
@@ -363,12 +622,121 @@ class TokenPilotAutoConfigurationTest {
     }
 
     @Test
-    @DisplayName("MeterRegistry가 존재할 때 Micrometer 관련 빈이 등록되어야 한다")
+    @DisplayName("MeterRegistry가 존재하면 Token Pilot 고유 publisher만 기본 등록되어야 한다")
     void shouldRegisterMicrometerBeanWhenMeterRegistryExists() {
         this.contextRunner
             .withUserConfiguration(MeterRegistryConfiguration.class)
             .run(context -> {
+                assertThat(context).hasSingleBean(CoreMetricsPublisher.class);
+                assertThat(context).hasSingleBean(BudgetMetricsPublisher.class);
+                assertThat(context).hasSingleBean(NotificationMetricsPublisher.class);
+                assertThat(context).doesNotHaveBean(MicroCostMetricsPublisher.class);
+                assertThat(context.getBean(TokenPilotProperties.class)
+                    .getMetrics().getTagWhitelist()).isEmpty();
+                assertThat(context.getBean(TokenPilotProperties.class)
+                    .getMetrics().isLegacyAiTokenMetricsEnabled()).isFalse();
+            });
+    }
+
+    @Test
+    @DisplayName("자동 설정 TokenBudget의 admission 결과가 preflight meter로 연결되어야 한다")
+    void shouldPublishPreflightMetricFromAutoConfiguredTokenBudget() {
+        this.contextRunner
+            .withUserConfiguration(MeterRegistryConfiguration.class)
+            .run(context -> {
+                TokenEstimator estimator = context.getBean(TokenEstimator.class);
+                TokenBudget tokenBudget = context.getBean(TokenBudget.class);
+
+                tokenBudget.check(
+                    "gpt-4o-mini",
+                    estimator.estimate("preflight metric"),
+                    256
+                );
+
+                MeterRegistry registry = context.getBean(MeterRegistry.class);
+                assertThat(registry.get("tokenpilot.preflight.requests")
+                    .tags("decision", "indeterminate", "reason", "incomplete_scope")
+                    .counter().count()).isEqualTo(1.0);
+            });
+    }
+
+    @Test
+    @DisplayName("legacy ai.token metrics는 명시적으로 활성화할 때만 등록되어야 한다")
+    void shouldRegisterLegacyMicrometerBeanOnlyWhenExplicitlyEnabled() {
+        this.contextRunner
+            .withUserConfiguration(MeterRegistryConfiguration.class)
+            .withPropertyValues(
+                "token-pilot.metrics.legacy-ai-token-metrics-enabled=true",
+                "token-pilot.metrics.tag-whitelist[0]=tenant_id"
+            )
+            .run(context -> {
+                assertThat(context).hasSingleBean(MicroCostMetricsPublisher.class);
                 assertThat(context).hasBean("microCostMetricsPublisher");
+                assertThat(context.getBean(TokenPilotProperties.class)
+                    .getMetrics().getTagWhitelist()).containsExactly("tenant_id");
+                assertThat(context.getBean(TokenPilotProperties.class)
+                    .getMetrics().isLegacyAiTokenMetricsEnabled()).isTrue();
+            });
+    }
+
+    @Test
+    @DisplayName("legacy flag 기본값에서는 Ledger 기록이 ai.token meter를 만들지 않아야 한다")
+    void shouldNotPublishLegacyMetersByDefault() {
+        this.contextRunner
+            .withUserConfiguration(MeterRegistryConfiguration.class)
+            .withPropertyValues(buildProperties(
+                "gpt-4o",
+                "0.005",
+                "0.015",
+                "USD"
+            ))
+            .run(context -> {
+                context.getBean(LedgerManager.class).record(
+                    "gpt-4o",
+                    TokenUsage.from(10, 20),
+                    Map.of("tenant_id", "raw-tenant")
+                );
+
+                MeterRegistry registry = context.getBean(MeterRegistry.class);
+                assertThat(registry.find("ai.token.cost.total").counter()).isNull();
+                assertThat(registry.find("ai.token.usage.total").counter()).isNull();
+            });
+    }
+
+    @Test
+    @DisplayName("사용자 정의 metrics publisher가 있으면 기본 publisher가 물러나야 한다")
+    void shouldBackOffForUserDefinedMetricsPublisher() {
+        this.contextRunner
+            .withUserConfiguration(UserMetricsPublisherConfiguration.class)
+            .run(context -> {
+                assertThat(context).hasSingleBean(CoreMetricsPublisher.class);
+                assertThat(context).hasBean("customCoreMetricsPublisher");
+                assertThat(context).doesNotHaveBean("tokenPilotCoreMetricsPublisher");
+            });
+    }
+
+    @Test
+    @DisplayName("legacy flag를 활성화하면 기존 ai.token meter를 발행해야 한다")
+    void shouldPublishLegacyMetersWhenEnabled() {
+        this.contextRunner
+            .withUserConfiguration(MeterRegistryConfiguration.class)
+            .withPropertyValues(
+                "token-pilot.metrics.legacy-ai-token-metrics-enabled=true",
+                PROP_MODEL_ID + "=gpt-4o",
+                PROP_PROMPT + "=0.005",
+                PROP_COMPLETION + "=0.015",
+                PROP_CURRENCY + "=USD"
+            )
+            .run(context -> {
+                context.getBean(LedgerManager.class).record(
+                    "gpt-4o",
+                    TokenUsage.from(10, 20),
+                    Map.of()
+                );
+
+                MeterRegistry registry = context.getBean(MeterRegistry.class);
+                assertThat(registry.find("ai.token.cost.total").counter()).isNotNull();
+                assertThat(registry.find("ai.token.usage.total").counters()).isNotEmpty();
             });
     }
 
@@ -377,8 +745,14 @@ class TokenPilotAutoConfigurationTest {
     void shouldNotRegisterMicrometerBeanWhenMetricsDisabled() {
         this.contextRunner
             .withUserConfiguration(MeterRegistryConfiguration.class)
-            .withPropertyValues("token-pilot.metrics.enabled=false")
+            .withPropertyValues(
+                "token-pilot.metrics.enabled=false",
+                "token-pilot.metrics.legacy-ai-token-metrics-enabled=true"
+            )
             .run(context -> {
+                assertThat(context).doesNotHaveBean(CoreMetricsPublisher.class);
+                assertThat(context).doesNotHaveBean(BudgetMetricsPublisher.class);
+                assertThat(context).doesNotHaveBean(NotificationMetricsPublisher.class);
                 assertThat(context).doesNotHaveBean("microCostMetricsPublisher");
             });
     }
@@ -431,6 +805,49 @@ class TokenPilotAutoConfigurationTest {
                 assertThat(context).hasSingleBean(BudgetNotificationService.class);
                 assertThat(context.getBean(TokenPilotProperties.class).getNotification().isEnabled())
                     .isTrue();
+            });
+    }
+
+    @Test
+    @DisplayName("notification success와 dedup 결과가 lifecycle meter로 연결되어야 한다")
+    void shouldPublishNotificationLifecycleMetrics() {
+        this.contextRunner
+            .withUserConfiguration(
+                MeterRegistryConfiguration.class,
+                FakeBudgetNotificationHandlerConfiguration.class
+            )
+            .withPropertyValues("token-pilot.notification.enabled=true")
+            .run(context -> {
+                Currency usd = Currency.getInstance("USD");
+                BudgetDecision decision = new BudgetDecision(
+                    new BudgetKey(
+                        "policy-a",
+                        "tenant",
+                        "tenant-a",
+                        BudgetWindow.parse("2026-08")
+                    ),
+                    BudgetDecision.EvaluationType.STATUS,
+                    BudgetState.WARN,
+                    BudgetThreshold.HALF,
+                    "half reached",
+                    Cost.of(new BigDecimal("5.00"), usd),
+                    Cost.of(new BigDecimal("5.00"), usd),
+                    Cost.of(new BigDecimal("10.00"), usd)
+                );
+                BudgetNotificationService service = context.getBean(
+                    BudgetNotificationService.class
+                );
+
+                service.notifyIfNeeded(decision, Map.of());
+                service.notifyIfNeeded(decision, Map.of());
+
+                MeterRegistry registry = context.getBean(MeterRegistry.class);
+                assertThat(registry.get("tokenpilot.notification.events")
+                    .tags("outcome", "success", "threshold", "half")
+                    .counter().count()).isEqualTo(1.0);
+                assertThat(registry.get("tokenpilot.notification.events")
+                    .tags("outcome", "deduplicated", "threshold", "half")
+                    .counter().count()).isEqualTo(1.0);
             });
     }
 
@@ -506,6 +923,19 @@ class TokenPilotAutoConfigurationTest {
     }
 
     @Configuration(proxyBeanMethods = false)
+    static class StoreOnlyBudgetConfiguration {
+        @Bean
+        public BudgetStateStore budgetStateStore() {
+            return mock(BudgetStateStore.class);
+        }
+
+        @Bean
+        public UsageExtractor usageExtractor() {
+            return response -> TokenUsage.from(10, 20);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
     static class FixedClockConfiguration {
         @Bean
         public Clock clock() {
@@ -557,6 +987,83 @@ class TokenPilotAutoConfigurationTest {
         @Bean
         public MeterRegistry meterRegistry() {
             return new SimpleMeterRegistry();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class UserMetricsPublisherConfiguration {
+        @Bean
+        public MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
+        }
+
+        @Bean
+        public CoreMetricsPublisher customCoreMetricsPublisher(
+            MeterRegistry meterRegistry
+        ) {
+            return new CoreMetricsPublisher(meterRegistry);
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class FailingAccountingListenerConfiguration {
+        @Bean
+        public ReservationAccountingListener failingAccountingListener() {
+            return new ReservationAccountingListener() {
+                @Override
+                public void onCommitted(ReservationAccountingEvent event) {
+                    throw new IllegalStateException("accounting listener failed");
+                }
+
+                @Override
+                public void onReservationEvaluated(
+                    BudgetReservationRequest request,
+                    BudgetReservationResult result
+                ) {
+                    throw new IllegalStateException("reservation listener failed");
+                }
+            };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class StoreDependentAccountingListenerConfiguration {
+        @Bean
+        StoreDependentAccountingListener storeDependentAccountingListener(
+            BudgetStateStore stateStore
+        ) {
+            return new StoreDependentAccountingListener(stateStore);
+        }
+    }
+
+    static final class StoreDependentAccountingListener
+        implements ReservationAccountingListener {
+
+        private final BudgetStateStore stateStore;
+        private final AtomicInteger evaluations = new AtomicInteger();
+
+        private StoreDependentAccountingListener(BudgetStateStore stateStore) {
+            this.stateStore = stateStore;
+        }
+
+        @Override
+        public void onCommitted(ReservationAccountingEvent event) {
+        }
+
+        @Override
+        public void onReservationEvaluated(
+            BudgetReservationRequest request,
+            BudgetReservationResult result
+        ) {
+            evaluations.incrementAndGet();
+        }
+
+        BudgetStateStore stateStore() {
+            return stateStore;
+        }
+
+        int evaluations() {
+            return evaluations.get();
         }
     }
 

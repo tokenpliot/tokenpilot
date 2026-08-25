@@ -16,6 +16,7 @@ import org.springframework.ai.chat.client.advisor.api.AdvisorChain;
 import org.springframework.ai.chat.model.ChatResponse;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -49,6 +50,7 @@ public class DefaultLedgerAdvisor implements LedgerAdvisor {
     private final PricingRegistry pricingRegistry;
     private final PricingEvaluator pricingEvaluator;
     private final MissingPricingPolicy missingPricingPolicy;
+    private final List<PricingMissingListener> pricingMissingListeners;
 
     public DefaultLedgerAdvisor(LedgerManager ledgerManager, UsageExtractor usageExtractor) {
         this(ledgerManager, usageExtractor, null, null, null, null);
@@ -89,6 +91,25 @@ public class DefaultLedgerAdvisor implements LedgerAdvisor {
                                 CostCalculator costCalculator, PricingRegistry pricingRegistry,
                                 PricingEvaluator pricingEvaluator,
                                 MissingPricingPolicy missingPricingPolicy) {
+        this(
+                ledgerManager,
+                usageExtractor,
+                budgetEvaluator,
+                budgetStateStore,
+                costCalculator,
+                pricingRegistry,
+                pricingEvaluator,
+                missingPricingPolicy,
+                List.of()
+        );
+    }
+
+    public DefaultLedgerAdvisor(LedgerManager ledgerManager, UsageExtractor usageExtractor,
+                                BudgetEvaluator budgetEvaluator, BudgetStateStore budgetStateStore,
+                                CostCalculator costCalculator, PricingRegistry pricingRegistry,
+                                PricingEvaluator pricingEvaluator,
+                                MissingPricingPolicy missingPricingPolicy,
+                                List<PricingMissingListener> pricingMissingListeners) {
         this.ledgerManager = ledgerManager;
         this.usageExtractor = usageExtractor;
         this.budgetEvaluator = budgetEvaluator;
@@ -102,6 +123,12 @@ public class DefaultLedgerAdvisor implements LedgerAdvisor {
         this.missingPricingPolicy = Objects.requireNonNull(
                 missingPricingPolicy,
                 "missingPricingPolicy must not be null"
+        );
+        this.pricingMissingListeners = List.copyOf(
+                Objects.requireNonNull(
+                        pricingMissingListeners,
+                        "pricingMissingListeners must not be null"
+                )
         );
     }
 
@@ -151,6 +178,7 @@ public class DefaultLedgerAdvisor implements LedgerAdvisor {
             try {
                 cost = ledgerManager.record(resolvedSnapshot, usage, tags);
             } catch (MissingPricingException exception) {
+                publishPricingMissingBestEffort(exception.getResolution());
                 return handleActualPricingFailure(response, exception);
             }
             ChatClientResponse reconciledResponse = withReconciliationResult(
@@ -167,7 +195,12 @@ public class DefaultLedgerAdvisor implements LedgerAdvisor {
             }
             return reconciledResponse;
         } else {
-            ledgerManager.record(modelId, usage, tags);
+            try {
+                ledgerManager.record(modelId, usage, tags);
+            } catch (MissingPricingException exception) {
+                publishPricingMissingBestEffort(exception.getResolution());
+                throw exception;
+            }
             recordLegacyBudgetCost(modelId, usage, response);
         }
 
@@ -223,6 +256,9 @@ public class DefaultLedgerAdvisor implements LedgerAdvisor {
                 ? Optional.empty()
                 : pricingRegistry.resolveSnapshot(modelId, pricingPolicyId);
         PricingResolution resolution = pricingEvaluator.validateSnapshotRates(snapshot);
+        if (!resolution.isResolved()) {
+            publishPricingMissingBestEffort(resolution);
+        }
         rejectMissingPricingIfFailClosed(resolution);
 
         return withPricingContext(request, pricingPolicyId, resolution, snapshot);
@@ -251,6 +287,23 @@ public class DefaultLedgerAdvisor implements LedgerAdvisor {
             return;
         }
         throw new MissingPricingException(resolution);
+    }
+
+    private void publishPricingMissingBestEffort(PricingResolution resolution) {
+        if (!resolution.isMissing() || pricingMissingListeners.isEmpty()) {
+            return;
+        }
+        PricingMissingEvent event = new PricingMissingEvent(
+                missingPricingPolicy,
+                resolution
+        );
+        for (PricingMissingListener listener : pricingMissingListeners) {
+            try {
+                listener.onPricingMissing(event);
+            } catch (RuntimeException ignored) {
+                // Optional observers do not change pricing or provider-call semantics.
+            }
+        }
     }
 
     private String extractModelId(ChatClientRequest request) {

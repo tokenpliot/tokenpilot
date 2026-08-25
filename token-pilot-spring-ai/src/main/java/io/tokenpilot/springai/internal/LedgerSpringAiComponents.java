@@ -5,11 +5,14 @@ import io.tokenpilot.budget.BudgetStateStore;
 import io.tokenpilot.core.CostCalculator;
 import io.tokenpilot.core.LedgerManager;
 import io.tokenpilot.core.PricingEvaluator;
+import io.tokenpilot.core.PricingMissingListener;
 import io.tokenpilot.core.PricingRegistry;
 import io.tokenpilot.core.domain.MissingPricingPolicy;
 import io.tokenpilot.core.internal.LedgerComponents;
 import io.tokenpilot.springai.LedgerAdvisor;
 import io.tokenpilot.springai.UsageExtractor;
+
+import java.util.List;
 
 /**
  * Spring AI 어댑터 컴포넌트 생성을 위한 팩토리 클래스입니다.
@@ -116,6 +119,30 @@ public final class LedgerSpringAiComponents {
             PricingEvaluator pricingEvaluator,
             MissingPricingPolicy missingPricingPolicy
     ) {
+        return defaultLedgerAdvisor(
+                ledgerManager,
+                usageExtractor,
+                budgetEvaluator,
+                budgetStateStore,
+                costCalculator,
+                pricingRegistry,
+                pricingEvaluator,
+                missingPricingPolicy,
+                List.of()
+        );
+    }
+
+    public static LedgerAdvisor defaultLedgerAdvisor(
+            LedgerManager ledgerManager,
+            UsageExtractor usageExtractor,
+            BudgetEvaluator budgetEvaluator,
+            BudgetStateStore budgetStateStore,
+            CostCalculator costCalculator,
+            PricingRegistry pricingRegistry,
+            PricingEvaluator pricingEvaluator,
+            MissingPricingPolicy missingPricingPolicy,
+            List<PricingMissingListener> pricingMissingListeners
+    ) {
         return new DefaultLedgerAdvisor(
                 ledgerManager,
                 usageExtractor,
@@ -124,7 +151,8 @@ public final class LedgerSpringAiComponents {
                 costCalculator,
                 pricingRegistry,
                 pricingEvaluator,
-                missingPricingPolicy
+                missingPricingPolicy,
+                pricingMissingListeners
         );
     }
 }

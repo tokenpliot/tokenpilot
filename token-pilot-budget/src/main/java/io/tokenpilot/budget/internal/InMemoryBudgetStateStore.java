@@ -12,11 +12,17 @@ import io.tokenpilot.budget.IdempotencyKey;
 import io.tokenpilot.budget.ReservationAccounting;
 import io.tokenpilot.budget.ReservationAccountingEvent;
 import io.tokenpilot.budget.ReservationAccountingListener;
+import io.tokenpilot.budget.ReservationAccountingListenerErrorHandler;
+import io.tokenpilot.budget.ReservationAccountingListenerFailureEvent;
+import io.tokenpilot.budget.ReservationAccountingListenerPhase;
+import io.tokenpilot.budget.ReservationAccountingListenerType;
 import io.tokenpilot.budget.ReservationAccountingReason;
 import io.tokenpilot.budget.ReservationActualTokens;
 import io.tokenpilot.budget.ReservationId;
 import io.tokenpilot.budget.ReservationReconciliation;
+import io.tokenpilot.budget.ReservationReconciliationRequiredEvent;
 import io.tokenpilot.budget.ReservationState;
+import io.tokenpilot.budget.ReservationStatus;
 import io.tokenpilot.budget.ReservationStateMachine;
 import io.tokenpilot.budget.ReservationTransition;
 import io.tokenpilot.budget.ReservationTokenEstimate;
@@ -53,7 +59,9 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
     private final Clock clock;
     private final Supplier<ReservationId> reservationIdGenerator;
     private final CostCalculator costCalculator;
-    private final List<ReservationAccountingListener> accountingListeners;
+    private final Supplier<List<ReservationAccountingListener>> accountingListenerSupplier;
+    private final Supplier<List<ReservationAccountingListenerErrorHandler>>
+            listenerErrorHandlerSupplier;
 
     public InMemoryBudgetStateStore() {
         this(
@@ -79,7 +87,7 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
             Supplier<ReservationId> reservationIdGenerator,
             CostCalculator costCalculator
     ) {
-        this(clock, reservationIdGenerator, costCalculator, List.of());
+        this(clock, reservationIdGenerator, costCalculator, List.of(), List.of());
     }
 
     public InMemoryBudgetStateStore(
@@ -87,6 +95,45 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
             Supplier<ReservationId> reservationIdGenerator,
             CostCalculator costCalculator,
             List<ReservationAccountingListener> accountingListeners
+    ) {
+        this(
+                clock,
+                reservationIdGenerator,
+                costCalculator,
+                accountingListeners,
+                List.of()
+        );
+    }
+
+    public InMemoryBudgetStateStore(
+            Clock clock,
+            Supplier<ReservationId> reservationIdGenerator,
+            CostCalculator costCalculator,
+            List<ReservationAccountingListener> accountingListeners,
+            List<ReservationAccountingListenerErrorHandler> listenerErrorHandlers
+    ) {
+        this(
+                clock,
+                reservationIdGenerator,
+                costCalculator,
+                fixedListSupplier(
+                        accountingListeners,
+                        "accountingListeners must not be null"
+                ),
+                fixedListSupplier(
+                        listenerErrorHandlers,
+                        "listenerErrorHandlers must not be null"
+                )
+        );
+    }
+
+    public InMemoryBudgetStateStore(
+            Clock clock,
+            Supplier<ReservationId> reservationIdGenerator,
+            CostCalculator costCalculator,
+            Supplier<List<ReservationAccountingListener>> accountingListenerSupplier,
+            Supplier<List<ReservationAccountingListenerErrorHandler>>
+                    listenerErrorHandlerSupplier
     ) {
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.reservationIdGenerator = Objects.requireNonNull(
@@ -97,11 +144,13 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
                 costCalculator,
                 "costCalculator must not be null"
         );
-        this.accountingListeners = List.copyOf(
-                Objects.requireNonNull(
-                        accountingListeners,
-                        "accountingListeners must not be null"
-                )
+        this.accountingListenerSupplier = Objects.requireNonNull(
+                accountingListenerSupplier,
+                "accountingListenerSupplier must not be null"
+        );
+        this.listenerErrorHandlerSupplier = Objects.requireNonNull(
+                listenerErrorHandlerSupplier,
+                "listenerErrorHandlerSupplier must not be null"
         );
     }
 
@@ -145,7 +194,13 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
                 )
         );
 
-        return Objects.requireNonNull(result.get(), "reservation result must be set");
+        BudgetReservationResult reservationResult = Objects.requireNonNull(
+                result.get(),
+                "reservation result must be set"
+        );
+        publishReservationEvaluated(request, reservationResult);
+        publishBlockedReservation(request, reservationResult);
+        return reservationResult;
     }
 
     @Override
@@ -260,13 +315,14 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
     ) {
         requireReconciliationRequiredReason(reason);
         Bucket bucket = bucketFor(reservationId);
+        ReservationTransition transition;
+        ReservationReconciliationRequiredEvent event;
         synchronized (bucket) {
             ReservationAccountingState accountingState = accountingState(
                     bucket,
                     reservationId
             );
-            ReservationTransition transition =
-                    accountingState.evaluateReconciliationRequired();
+            transition = accountingState.evaluateReconciliationRequired();
             if (!transition.status().isApplied()) {
                 return transition;
             }
@@ -276,8 +332,16 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
                     accountingState,
                     transition.resultingState()
             );
-            return transition;
+            event = new ReservationReconciliationRequiredEvent(
+                    reservationId,
+                    accountingState.reservation().key(),
+                    transition,
+                    reason,
+                    bucket.snapshot(accountingState.reservation().key())
+            );
         }
+        publishReconciliationRequired(event);
+        return transition;
     }
 
     @Override
@@ -425,6 +489,7 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
         Objects.requireNonNull(reason, "reason must not be null");
         Bucket bucket = bucketFor(command.reservationId());
         ReservationReconciliation reconciliation;
+        BudgetSnapshot accountingSnapshot;
         synchronized (bucket) {
             reconciliation = reconcileUsageInBucket(
                     bucket,
@@ -432,14 +497,18 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
                     type,
                     reason
             );
+            accountingSnapshot = bucket.snapshot(reconciliation.budgetKey());
         }
-        publishAccountingEvent(reconciliation);
+        publishAccountingEvent(reconciliation, accountingSnapshot);
         return reconciliation;
     }
 
     private void publishAccountingEvent(
-            ReservationReconciliation reconciliation
+            ReservationReconciliation reconciliation,
+            BudgetSnapshot accountingSnapshot
     ) {
+        List<ReservationAccountingListener> accountingListeners =
+                accountingListeners();
         if (!reconciliation.transition().status().isApplied()
                 || accountingListeners.isEmpty()) {
             return;
@@ -448,18 +517,124 @@ public class InMemoryBudgetStateStore implements BudgetStateStore, ReservationAc
                 reconciliation
         );
         for (ReservationAccountingListener listener : accountingListeners) {
-            notifyBestEffort(listener, event);
+            notifyBestEffort(
+                    listener,
+                    ReservationAccountingListenerPhase.ACCOUNTING_APPLIED,
+                    () -> listener.onAccountingApplied(event, accountingSnapshot)
+            );
         }
     }
 
-    private static void notifyBestEffort(
+    private void publishReservationEvaluated(
+            BudgetReservationRequest request,
+            BudgetReservationResult result
+    ) {
+        for (ReservationAccountingListener listener : accountingListeners()) {
+            notifyBestEffort(
+                    listener,
+                    ReservationAccountingListenerPhase.RESERVATION_EVALUATED,
+                    () -> listener.onReservationEvaluated(request, result)
+            );
+        }
+    }
+
+    private void publishBlockedReservation(
+            BudgetReservationRequest request,
+            BudgetReservationResult result
+    ) {
+        if (result.status() != ReservationStatus.BLOCKED) {
+            return;
+        }
+        for (ReservationAccountingListener listener : accountingListeners()) {
+            notifyBestEffort(
+                    listener,
+                    ReservationAccountingListenerPhase.RESERVATION_BLOCKED,
+                    () -> listener.onReservationBlocked(request, result)
+            );
+        }
+    }
+
+    private void publishReconciliationRequired(
+            ReservationReconciliationRequiredEvent event
+    ) {
+        for (ReservationAccountingListener listener : accountingListeners()) {
+            notifyBestEffort(
+                    listener,
+                    ReservationAccountingListenerPhase.RECONCILIATION_REQUIRED,
+                    () -> listener.onReconciliationRequired(event)
+            );
+        }
+    }
+
+    private void notifyBestEffort(
             ReservationAccountingListener listener,
-            ReservationAccountingEvent event
+            ReservationAccountingListenerPhase phase,
+            Runnable callback
     ) {
         try {
-            listener.onCommitted(event);
+            callback.run();
         } catch (RuntimeException ignored) {
-            // Listener 실패는 이미 적용된 회계 상태를 되돌리지 않습니다.
+            publishListenerFailure(listenerType(listener), phase);
+        }
+    }
+
+    private ReservationAccountingListenerType listenerType(
+            ReservationAccountingListener listener
+    ) {
+        try {
+            ReservationAccountingListenerType listenerType = listener.listenerType();
+            return listenerType == null
+                    ? ReservationAccountingListenerType.CUSTOM
+                    : listenerType;
+        } catch (RuntimeException ignored) {
+            return ReservationAccountingListenerType.CUSTOM;
+        }
+    }
+
+    private void publishListenerFailure(
+            ReservationAccountingListenerType listenerType,
+            ReservationAccountingListenerPhase phase
+    ) {
+        List<ReservationAccountingListenerErrorHandler> listenerErrorHandlers =
+                listenerErrorHandlers();
+        if (listenerErrorHandlers.isEmpty()) {
+            return;
+        }
+        ReservationAccountingListenerFailureEvent event =
+                new ReservationAccountingListenerFailureEvent(listenerType, phase);
+        for (ReservationAccountingListenerErrorHandler errorHandler
+                : listenerErrorHandlers) {
+            try {
+                errorHandler.onFailure(event);
+            } catch (RuntimeException ignored) {
+                // Error handler도 best-effort이며 회계/admission 결과에 영향을 주지 않습니다.
+            }
+        }
+    }
+
+    private List<ReservationAccountingListener> accountingListeners() {
+        return suppliedList(accountingListenerSupplier);
+    }
+
+    private List<ReservationAccountingListenerErrorHandler> listenerErrorHandlers() {
+        return suppliedList(listenerErrorHandlerSupplier);
+    }
+
+    private static <T> Supplier<List<T>> fixedListSupplier(
+            List<T> values,
+            String message
+    ) {
+        List<T> copy = List.copyOf(Objects.requireNonNull(values, message));
+        return () -> copy;
+    }
+
+    private static <T> List<T> suppliedList(Supplier<List<T>> supplier) {
+        try {
+            List<T> values = supplier.get();
+            return values == null ? List.of() : List.copyOf(values);
+        } catch (RuntimeException ignored) {
+            // Optional observer resolution cannot change reservation/accounting results.
+            return List.of();
         }
     }
 

@@ -1,14 +1,10 @@
 package io.tokenpilot.autoconfigure;
 
-import io.tokenpilot.budget.BudgetPolicy;
-import io.tokenpilot.core.domain.Cost;
 import io.tokenpilot.core.domain.PricingPlan;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
-import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Currency;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -84,20 +80,6 @@ public class TokenPilotProperties {
                       .toList();
     }
 
-    public BudgetPolicy toBudgetPolicy() {
-        return new BudgetPolicy(
-            budget.getPolicyId(),
-            budget.getTargetType(),
-            budget.getTargetTagKey(),
-            budget.getFallbackTargetId(),
-            Cost.of(
-                budget.getMonthlyLimit(),
-                Currency.getInstance(budget.getCurrency())
-            ),
-            ZoneId.of(budget.getZoneId())
-        );
-    }
-
     public static class PricingProperties {
         private List<PricingPlanProperties> plans = new ArrayList<>();
 
@@ -112,7 +94,8 @@ public class TokenPilotProperties {
 
     public static class MetricsProperties {
         private boolean enabled = true;
-        private Set<String> tagWhitelist = new HashSet<>(List.of("tenant_id"));
+        private Set<String> tagWhitelist = new HashSet<>();
+        private boolean legacyAiTokenMetricsEnabled = false;
 
         public boolean isEnabled() {
             return enabled;
@@ -128,6 +111,16 @@ public class TokenPilotProperties {
 
         public void setTagWhitelist(Set<String> tagWhitelist) {
             this.tagWhitelist = tagWhitelist;
+        }
+
+        public boolean isLegacyAiTokenMetricsEnabled() {
+            return legacyAiTokenMetricsEnabled;
+        }
+
+        public void setLegacyAiTokenMetricsEnabled(
+                boolean legacyAiTokenMetricsEnabled
+        ) {
+            this.legacyAiTokenMetricsEnabled = legacyAiTokenMetricsEnabled;
         }
     }
 

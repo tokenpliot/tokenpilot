@@ -57,6 +57,65 @@ atomic budget reservation/idempotency foundation. The MVP is extending this
 foundation with provider-connected preflight control and actual usage
 reconciliation.
 
+## Micrometer metrics
+
+When a `MeterRegistry` is available, the Spring Boot starter publishes
+TokenPilot-owned, low-cardinality metrics for control and accounting outcomes:
+
+| Metric | Tags | Meaning |
+| --- | --- | --- |
+| `tokenpilot.cost.total` | `currency` | Newly committed actual cost from usage-based reconciliation |
+| `tokenpilot.preflight.requests` | `decision`, `reason` | Context admission decisions |
+| `tokenpilot.budget.reservations` | `state` | Atomic reservation results |
+| `tokenpilot.reconciliation.error.tokens` | `direction` | Absolute estimate/actual token error |
+| `tokenpilot.reconciliation.outcomes` | `outcome`, `reason` | Applied reconciliation outcomes |
+| `tokenpilot.pricing.missing` | `policy` | Missing pricing observed at the provider boundary |
+| `tokenpilot.listener.failures` | `listener`, `phase` | Isolated accounting-listener failures |
+| `tokenpilot.notification.events` | `outcome`, `threshold` | Notification delivery and deduplication outcomes |
+
+The default user-tag whitelist is empty. The metrics above never include raw
+model, tenant, user, request, reservation, or idempotency identifiers. Their
+tag values come from bounded domain enums or registered currency codes.
+
+```yaml
+token-pilot:
+  metrics:
+    enabled: true
+    tag-whitelist: []
+    legacy-ai-token-metrics-enabled: false
+```
+
+The former `ai.token.*` meters are disabled by default because Spring AI
+Observability may already publish standard token telemetry. Set
+`token-pilot.metrics.legacy-ai-token-metrics-enabled=true` to opt in during
+migration. This is a 0.1.x compatibility bridge, including the legacy raw
+`model` tag, and is planned for removal in 0.2.0. Migrate dashboards to Spring
+AI token telemetry and the `tokenpilot.*` control/accounting meters before
+then. `tag-whitelist` applies only to that legacy path and limits keys, not the
+cardinality of application-provided values. Existing direct
+`MicroCostMetricsPublisher` constructors retain their legacy `tenant_id`
+allowlist behavior; the starter default remains empty.
+
+Accounting metrics consume newly applied reservation transitions, so reused
+callbacks do not add cost twice and unavailable actual usage is recorded as
+`reconciliation_required`, not as zero cost or zero error. Listener delivery
+is synchronous, best-effort, and at-most-once without a durable outbox.
+Micrometer counters use `double` internally and are operational telemetry, not
+the monetary source of truth; the ledger's `BigDecimal` values remain
+authoritative. The legacy cost-only commit methods cannot carry token/model
+correlation and do not emit these accounting metrics; new reservations should
+use the usage-based reconciliation API.
+
+`LedgerListener` and other optional observer `RuntimeException`s are isolated:
+they do not change ledger/provider results and later listeners still run.
+JVM `Error`s are not swallowed.
+
+For direct autoconfiguration composition, use
+`TokenPilotBudgetPolicyFactory.from(properties)` instead of the former
+`TokenPilotProperties.toBudgetPolicy()`. Keeping the budget return type out of
+the shared properties class allows autoconfiguration to start when the optional
+budget module is absent.
+
 ## Framework-independent core
 
 Applications that do not use Spring can depend on `token-pilot-core` alone:

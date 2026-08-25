@@ -4,7 +4,7 @@
 
 Token Pilot is evolving from a Spring AI usage-tracking starter into a framework-independent Java LLM control and accounting core with optional framework and observability adapters.
 
-Current truth: post-call usage normalization, cost calculation, ledger events, Micrometer publishing, Clock-based monthly budget windows, pure budget decisions, typed missing-pricing policies, pricing snapshots, framework-independent token count results, a UTF-8 byte heuristic estimator, a preflight cost-bound projection, versioned model metadata, conservative context admission, a plain-Java core consumer verification path, framework-independent in-memory atomic reservations, and estimate/actual reconciliation with best-effort accounting events are implemented. Candidate-aware request production and Spring AI lifecycle integration remain 30-day MVP targets, not current capabilities.
+Current truth: post-call usage normalization, cost calculation, ledger events, Token Pilot-owned Micrometer control/accounting metrics, Clock-based monthly budget windows, pure budget decisions, typed missing-pricing policies, pricing snapshots, framework-independent token count results, a UTF-8 byte heuristic estimator, a preflight cost-bound projection, versioned model metadata, conservative context admission, a plain-Java core consumer verification path, framework-independent in-memory atomic reservations, and estimate/actual reconciliation with observable best-effort accounting events are implemented. Candidate-aware request production and Spring AI lifecycle integration remain 30-day MVP targets, not current capabilities.
 
 Distribution direction: publish a framework-independent core and an optional Spring AI convenience starter from the same repository and release train. The existing starter artifact is `token-pilot-starter`; `token-pilot-spring-ai-starter` is only a target name until a compatibility ADR and module change land.
 
@@ -71,12 +71,12 @@ Token Pilot의 제품 포지션은 framework-independent Java LLM control and ac
 
 | Module | Status | Notes |
 | --- | --- | --- |
-| `token-pilot-core` | Basic implementation complete | Domain records, pricing, calculator, registry, ledger manager, pricing snapshots, versioned model catalog, token count results, UTF-8 byte heuristic estimation, preflight cost-bound projection, conservative context admission, and public plain-Java consumer verification |
-| `token-pilot-spring-ai` | Basic implementation complete | Spring AI 2.0.0 `UsageExtractor`, `LedgerAdvisor`, pricing snapshot resolution, response usage recording, reconciliation decisions, and legacy provider-boundary BLOCK enforcement |
-| `token-pilot-micrometer` | Basic implementation complete | `MetricsOptions`, tag whitelist, and metric metadata exist; metric ownership must be narrowed |
-| `token-pilot-budget` | Atomic reservation and reconciliation implemented | Typed monthly keys, Clock/ZoneId windows, safe-upper-bound reservations, commit/release/write-off lifecycle, pending reconciliation liability, estimate/actual token and cost deltas, duplicate callback protection, and framework-independent best-effort accounting events implemented; candidate production and durable stores remain |
-| `token-pilot-notification` | Basic implementation complete | Event API and deduplication exist; not yet connected to the full advisor/budget lifecycle |
-| `token-pilot-autoconfigure` | Basic implementation complete | Bean registration, property binding, pricing/budget/notification wiring, and `ChatClientBuilderCustomizer` implemented |
+| `token-pilot-core` | Basic implementation complete | Domain records, pricing, calculator, registry, ledger manager, pricing snapshots, versioned model catalog, token count results, UTF-8 byte heuristic estimation, preflight cost-bound projection, conservative context admission, decision/pricing-miss listener contracts, and public plain-Java consumer verification |
+| `token-pilot-spring-ai` | Basic implementation complete | Spring AI 2.0.0 `UsageExtractor`, `LedgerAdvisor`, pricing snapshot/miss observation, response usage recording, reconciliation decisions, and legacy provider-boundary BLOCK enforcement |
+| `token-pilot-micrometer` | Token Pilot-owned metrics implemented | Optional owner-specific publishers cover cost, preflight, reservation, pricing-miss, reconciliation, listener-failure, and notification outcomes; legacy `ai.token.*` publishing is opt-in |
+| `token-pilot-budget` | Atomic reservation and reconciliation implemented | Typed monthly keys, safe-upper-bound reservations, reconciliation, duplicate callback protection, bounded listener-failure observation, and framework-independent best-effort accounting events implemented; candidate production and durable stores remain |
+| `token-pilot-notification` | Basic implementation complete | Event API, deduplication, and handler success/failure/dedup lifecycle observation exist; full atomic advisor/budget connection remains #48 |
+| `token-pilot-autoconfigure` | Basic implementation complete | Bean registration, property binding, owner-specific metric listener wiring, pricing/budget/notification wiring, and `ChatClientBuilderCustomizer` implemented |
 | `token-pilot-starter` | Basic implementation complete | Thin final user entrypoint that brings runtime modules together |
 | `token-pilot-sample-app` | Basic E2E complete | Direct ledger metrics, budget, and fake Spring AI advisor E2E implemented |
 
@@ -99,13 +99,14 @@ Gradle dependency cleanup has landed. Library modules should not regain app-only
 
 Current Micrometer status:
 
-- `MetricsOptions` exists as the small Micrometer options object.
-- Default allowed tag keys remain `tenant_id`.
-- The existing `MicroCostMetricsPublisher(MeterRegistry)` constructor is preserved.
-- Tests cover null/empty tags and multiple allowed tags.
-- Metric descriptions and base units should remain stable.
-- Current `ai.token.*` metrics may overlap Spring AI Observability; treat renaming/default suppression as an explicit compatibility decision.
-- New default metrics should describe Token Pilot-owned cost, preflight, reservation, pricing-miss, and reconciliation outcomes.
+- Default Token Pilot metrics describe cost, preflight, reservation, pricing-miss, reconciliation, isolated listener-failure, and notification lifecycle outcomes.
+- Default user tag keys are empty, and Token Pilot-owned metrics use only bounded enum/registered identifier values.
+- `tokenpilot.cost.total` consumes newly applied actual reservation commits, never legacy ledger estimates or missing-pricing zero values.
+- Duplicate/reused reconciliation callbacks do not republish accounting metrics; actual-unavailable transitions publish `reconciliation_required` without zero cost or error samples.
+- The existing `MicroCostMetricsPublisher` constructors remain available for direct compatibility.
+- Legacy `ai.token.*` metrics are off in starter/autoconfigure unless `token-pilot.metrics.legacy-ai-token-metrics-enabled=true`.
+- The legacy metric opt-in, including its raw `model` compatibility tag, is a 0.1.x bridge planned for removal in 0.2.0.
+- Micrometer `double` counters are operational telemetry; exact `BigDecimal` ledger values remain the accounting source of truth.
 
 ## Distribution Contract
 
@@ -149,6 +150,7 @@ The autoconfigure module provides:
 
 - `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - `TokenPilotAutoConfiguration`
+- Owner-specific core metrics, budget, Spring AI, notification, and metrics auto-configurations
 - `TokenPilotProperties`
 - Pricing property binding
 - Budget property binding
@@ -192,10 +194,14 @@ Default bean graph:
 | --- | --- | --- |
 | `CostCalculator` | missing bean | Core cost calculation |
 | `PricingRegistry` | missing bean | Pricing plan lookup |
+| `ModelRegistry` | missing bean | Versioned default model/context metadata |
+| `TokenEstimator` | missing bean | UTF-8 byte heuristic token estimate |
+| `TokenBudget` | missing bean | Context admission and preflight decision events |
 | `LedgerManager` | missing bean | Cost and usage recording |
 | `UsageExtractor` | Spring AI classpath + missing bean | Spring AI response usage extraction |
 | `LedgerAdvisor` | Spring AI classpath + missing bean | ChatClient advisor |
-| `MicroCostMetricsPublisher` | Micrometer classpath + `token-pilot.metrics.enabled` | Cost/token metrics listener |
+| owner-specific Token Pilot metric publishers | Micrometer + owner contract classpath + `token-pilot.metrics.enabled` | Low-cardinality control/accounting metrics |
+| `MicroCostMetricsPublisher` | Micrometer + explicit legacy flag | Compatibility `ai.token.*` metrics listener |
 | `BudgetStateStore` | `token-pilot.budget.enabled` + missing bean | Default in-memory budget state |
 | `BudgetEvaluator` | `token-pilot.budget.enabled` + missing bean | Default budget evaluator |
 | `ChatClientBuilderCustomizer` | Spring AI classpath + `LedgerAdvisor` bean | Adds advisor to ChatClient builders |
@@ -251,9 +257,8 @@ token-pilot:
           COMPLETION: 0.00060
   metrics:
     enabled: true
-    tag-whitelist:
-      - tenant_id
-      - model
+    legacy-ai-token-metrics-enabled: false
+    tag-whitelist: []
   budget:
     enabled: false
     policy-id: default-monthly
@@ -285,7 +290,7 @@ Test-only E2E endpoint:
 
 - `GET /test/token-pilot/chat`: exercises the Spring AI `ChatClient` advisor path with a fake/mock provider or documented real provider setup.
 
-The direct ledger E2E test verifies that `/actuator/prometheus` contains token-pilot metrics after a ledger event is recorded. The fake ChatClient E2E test verifies that Spring AI `ChatClient` calls flow through `LedgerAdvisor` into token-pilot metrics without requiring a real provider API key.
+The default starter E2E verifies a Token Budget preflight metric while legacy `ai.token.*` meters and sensitive tags remain absent. The fake ChatClient E2E verifies the Spring AI advisor path, explicit legacy compatibility mode, and a bounded pricing-miss metric without requiring a real provider API key.
 
 ## Maven Publishing Direction
 
@@ -330,8 +335,10 @@ The active checklist is in `docs/30_DAY_MVP_REPORT.md`; detailed long-term works
 - Spring AI usage extraction converts map/JSON-compatible native usage objects into the normalized core model. Real-provider compatibility fixtures remain required because provider and Spring AI usage shapes can change independently.
 - The legacy provider boundary blocks an already-exhausted budget decision before provider invocation. Its candidate-free `STATUS` input is a regression guard, not admission evidence; the flow remains check-then-add and is not connected to the new atomic reservation lifecycle until #39.
 - In-memory reservation reconciliation uses the reservation-time pricing snapshot, accepts only provider-reported or provider-derived actual usage, moves estimate liability atomically between active, pending, and committed totals, and skips cost calculation for exact duplicate callbacks. Legacy reservations without pricing/token metadata have an explicit cost-only settlement path; new reservations should use the usage-based API. Spring AI callback integration remains #39.
-- Accounting listeners run synchronously after the bucket lock is released. Runtime listener failures do not roll back a committed transition, stop later listeners, or trigger redelivery on duplicate callbacks, but delivery remains best-effort at-most-once without a durable outbox; failure observation remains #40.
-- Current Micrometer `ai.token.*` metrics may duplicate Spring AI Observability; preserve compatibility while deciding default suppression or replacement.
+- Accounting listeners run synchronously after the bucket lock is released. Runtime listener failures do not roll back a committed transition, stop later listeners, or trigger redelivery on duplicate callbacks; bounded failure events feed `tokenpilot.listener.failures`, but delivery remains best-effort at-most-once without a durable outbox.
+- Legacy `LedgerListener` runtime failures are likewise isolated from ledger/provider results and later listeners; JVM `Error`s still propagate.
+- Compatibility cost-only reservation commits do not carry token/model correlation and therefore do not publish accounting metrics; new reservations should use usage-based reconciliation.
+- Legacy Micrometer `ai.token.*` metrics may duplicate Spring AI Observability and are therefore disabled by default; their explicit migration opt-in still permits application-provided tag values with caller-owned cardinality.
 - The verified Spring AI 2.0.0 path is synchronous `ChatClient` usage recording with a fake provider. Streaming cancellation and reconciliation remain outside the current compatibility guarantee.
 - The repository, README, JReleaser configuration, and every published module POM use the MIT License. `verifyPublicationMetadata` guards this release contract and ensures the sample app is not published.
 - Sample app E2E uses a fake Spring AI `ChatModel`; real provider API behavior is not yet verified.
@@ -354,6 +361,12 @@ Verify the fixed Java/Spring compatibility matrix and generated core-only consum
 
 ```bash
 ./gradlew verifyCompatibilityMatrix verifyCoreConsumer
+```
+
+Verify the published Micrometer artifact with optional owners absent/composed and core autoconfiguration without optional adapters:
+
+```bash
+./gradlew verifyMicrometerConsumer
 ```
 
 Run sample app after implementation work:
@@ -401,6 +414,13 @@ Stage and deploy a Central release:
 ```
 
 ## Update History
+
+### 2026-08-25
+
+- Added owner-specific Micrometer publishers for Token Pilot cost, preflight, atomic reservation, pricing-miss, reconciliation, listener-failure, and notification lifecycle outcomes with bounded default tags.
+- Connected framework-independent decision/lifecycle listener contracts while preserving duplicate-safe applied accounting semantics and observable best-effort listener failure isolation.
+- Disabled legacy `ai.token.*` metrics and the default user tag whitelist in starter/autoconfigure; retained explicit compatibility opt-in and existing direct publisher constructors.
+- Added published-artifact consumer checks for Micrometer with optional owners both absent and explicitly composed.
 
 ### 2026-08-22
 

@@ -1,45 +1,28 @@
 package io.tokenpilot.autoconfigure;
 
-import io.micrometer.core.instrument.MeterRegistry;
-import io.tokenpilot.budget.BudgetEvaluator;
-import io.tokenpilot.budget.BudgetStateStore;
-import io.tokenpilot.budget.internal.LedgerBudgetComponents;
 import io.tokenpilot.core.CostCalculator;
 import io.tokenpilot.core.LedgerListener;
 import io.tokenpilot.core.LedgerManager;
+import io.tokenpilot.core.ModelRegistry;
+import io.tokenpilot.core.PreflightDecisionListener;
 import io.tokenpilot.core.PricingEvaluator;
 import io.tokenpilot.core.PricingProvider;
 import io.tokenpilot.core.PricingRegistry;
-import io.tokenpilot.core.domain.MissingPricingPolicy;
+import io.tokenpilot.core.TokenBudget;
+import io.tokenpilot.core.TokenEstimator;
+import io.tokenpilot.core.CoreComponents;
 import io.tokenpilot.core.internal.LedgerComponents;
-import io.tokenpilot.micrometer.internal.LedgerMicrometerComponents;
-import io.tokenpilot.springai.LedgerAdvisor;
-import io.tokenpilot.springai.UsageExtractor;
-import io.tokenpilot.springai.internal.LedgerSpringAiComponents;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import io.tokenpilot.notification.BudgetNotificationHandler;
-import io.tokenpilot.notification.BudgetNotificationService;
-import io.tokenpilot.notification.InMemoryNotificationStateStore;
-import io.tokenpilot.notification.NotificationStateStore;
-
-import java.time.Clock;
 
 /**
  * Token Pilot 라이브러리의 자동 설정을 담당하는 클래스.
  */
-@AutoConfiguration(afterName = {
-        "org.springframework.boot.micrometer.metrics.autoconfigure.MetricsAutoConfiguration",
-        "org.springframework.boot.micrometer.metrics.autoconfigure.CompositeMeterRegistryAutoConfiguration",
-        "org.springframework.boot.micrometer.metrics.autoconfigure.export.prometheus.PrometheusMetricsExportAutoConfiguration"
-})
+@AutoConfiguration
 @ConditionalOnProperty(prefix = "token-pilot", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(TokenPilotProperties.class)
 public class TokenPilotAutoConfiguration {
@@ -82,6 +65,39 @@ public class TokenPilotAutoConfiguration {
     }
 
     /**
+     * 버전이 고정된 기본 model metadata catalog를 등록합니다.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public ModelRegistry modelRegistry() {
+        return CoreComponents.defaultModelRegistry();
+    }
+
+    /**
+     * framework-independent UTF-8 휴리스틱 estimator를 등록합니다.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public TokenEstimator tokenEstimator() {
+        return CoreComponents.utf8ByteHeuristicTokenEstimator();
+    }
+
+    /**
+     * context admission 결과를 등록된 observer와 함께 발행합니다.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public TokenBudget tokenBudget(
+            ModelRegistry modelRegistry,
+            ObjectProvider<PreflightDecisionListener> decisionListeners
+    ) {
+        return CoreComponents.tokenBudget(
+                modelRegistry,
+                decisionListeners.orderedStream().toList()
+        );
+    }
+
+    /**
      * 비용 기록 및 리스너 관리를 담당하는 LedgerManager를 등록합니다.
      */
     @Bean
@@ -97,134 +113,4 @@ public class TokenPilotAutoConfiguration {
         );
     }
 
-    /**
-     * ChatClientResponse에서 토큰 사용량을 추출하는 UsageExtractor를 등록합니다.
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnClass({ChatClient.class, LedgerSpringAiComponents.class})
-    public UsageExtractor usageExtractor() {
-        return LedgerSpringAiComponents.defaultUsageExtractor();
-    }
-
-    /**
-     * Spring AI 호출 전후로 비용을 측정하고 기록하는 LedgerAdvisor를 등록합니다.
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnClass({ChatClient.class, LedgerSpringAiComponents.class})
-    public LedgerAdvisor ledgerAdvisor(
-            LedgerManager ledgerManager,
-            UsageExtractor usageExtractor,
-            ObjectProvider<BudgetEvaluator> budgetEvaluator,
-            ObjectProvider<BudgetStateStore> budgetStateStore,
-            CostCalculator costCalculator,
-            PricingRegistry pricingRegistry,
-            PricingEvaluator pricingEvaluator
-    ) {
-        BudgetEvaluator evaluator = budgetEvaluator.getIfAvailable();
-        BudgetStateStore stateStore = budgetStateStore.getIfAvailable();
-
-        if (evaluator != null && stateStore != null) {
-            return LedgerSpringAiComponents.defaultLedgerAdvisor(
-                    ledgerManager,
-                    usageExtractor,
-                    evaluator,
-                    stateStore,
-                    costCalculator,
-                    pricingRegistry,
-                    pricingEvaluator,
-                    MissingPricingPolicy.FAIL_CLOSED
-            );
-        }
-
-        return LedgerSpringAiComponents.defaultLedgerAdvisor(
-                ledgerManager,
-                usageExtractor,
-                costCalculator,
-                pricingRegistry,
-                pricingEvaluator
-        );
-    }
-
-    /**
-     * LedgerAdvisor가 빈으로 등록되어 있을 경우, ChatClient.Builder를 위한 커스터마이저를 생성합니다.
-     */
-    @Bean
-    @ConditionalOnBean(LedgerAdvisor.class)
-    @ConditionalOnClass(ChatClient.class)
-    public LedgerChatClientBuilderCustomizer ledgerChatClientBuilderCustomizer(LedgerAdvisor ledgerAdvisor) {
-        return new LedgerChatClientBuilderCustomizer(ledgerAdvisor);
-    }
-
-    /**
-     * Micrometer 메트릭 발행을 위한 리스너를 등록합니다.
-     */
-    @Bean
-    @ConditionalOnClass({MeterRegistry.class, LedgerMicrometerComponents.class})
-    @ConditionalOnBean(MeterRegistry.class)
-    @ConditionalOnProperty(prefix = "token-pilot.metrics", name = "enabled", havingValue = "true", matchIfMissing = true)
-    public LedgerListener microCostMetricsPublisher(MeterRegistry meterRegistry, TokenPilotProperties properties) {
-        return LedgerMicrometerComponents.microCostMetricsPublisher(meterRegistry, properties.getMetrics()
-                                                                                             .getTagWhitelist());
-    }
-
-    /**
-     * 예산 관리 모듈이 있을 경우 기본 예산 저장소를 등록합니다.
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnClass(LedgerBudgetComponents.class)
-    @ConditionalOnProperty(prefix = "token-pilot.budget", name = "enabled", havingValue = "true")
-    public BudgetStateStore budgetStateStore() {
-        return LedgerBudgetComponents.inMemoryBudgetStateStore();
-    }
-
-    /**
-     * 예산 관리 모듈이 있을 경우 예산 평가기를 등록합니다.
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnClass(LedgerBudgetComponents.class)
-    @ConditionalOnProperty(prefix = "token-pilot.budget", name = "enabled", havingValue = "true")
-    public BudgetEvaluator budgetEvaluator(
-        BudgetStateStore budgetStateStore,
-        TokenPilotProperties properties,
-        ObjectProvider<Clock> clock
-    ) {
-        return LedgerBudgetComponents.defaultBudgetEvaluator(
-            budgetStateStore,
-            properties.toBudgetPolicy(),
-            clock.getIfAvailable(Clock::systemUTC)
-        );
-    }
-
-    /**
-     * 알림 상태 저장소를 등록합니다.
-     * - 중복 알림 방지를 위해 window 단위로 상태를 저장
-     * - token-pilot.notification.enabled=true 일 때만 등록
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnProperty(prefix = "token-pilot.notification", name = "enabled", havingValue = "true")
-    public NotificationStateStore notificationStateStore() {
-        return new InMemoryNotificationStateStore();
-    }
-
-    /**
-     * 예산 알림 서비스를 등록합니다.
-     * - BudgetNotificationHandler 빈이 있을 때만 등록
-     * - 없으면 no-op으로 동작 (알림 서비스 자체가 등록되지 않음)
-     * - token-pilot.notification.enabled=true 일 때만 등록
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnBean(BudgetNotificationHandler.class)
-    @ConditionalOnProperty(prefix = "token-pilot.notification", name = "enabled", havingValue = "true")
-    public BudgetNotificationService budgetNotificationService(
-        BudgetNotificationHandler handler,
-        NotificationStateStore notificationStateStore
-    ) {
-        return new BudgetNotificationService(handler, notificationStateStore);
-    }
 }
