@@ -1656,6 +1656,37 @@ tasks.register('verifyExternalConsumers', ExternalConsumerVerificationTask) {
             }
         }
 
+        def excludePublishedArtifactsFromRemoteRepositories = { File consumerDirectory ->
+            fileTree(consumerDirectory).matching {
+                include '**/*.gradle'
+            }.files.each { buildFile ->
+                def original = buildFile.getText('UTF-8')
+                def restricted = original.replace(
+                    'mavenCentral()',
+                    """mavenCentral {
+    content {
+        excludeGroup 'cloud.token-pilot'
+    }
+}""".stripIndent()
+                )
+                if (externalDependencyRepository != 'https://repo.maven.apache.org/maven2') {
+                    def remoteRepository = "maven { url = uri('${externalDependencyRepository}') }"
+                    restricted = restricted.replace(
+                        remoteRepository,
+                        """maven {
+    url = uri('${externalDependencyRepository}')
+    content {
+        excludeGroup 'cloud.token-pilot'
+    }
+}""".stripIndent()
+                    )
+                }
+                if (restricted != original) {
+                    buildFile.setText(restricted, 'UTF-8')
+                }
+            }
+        }
+
         def appendText = { File file, String text ->
             file.setText(file.getText('UTF-8') + text, 'UTF-8')
         }
@@ -1934,6 +1965,7 @@ tasks.named('test') {
                 repository.toURI().toString(),
                 missingRepository.toURI().toString()
             )
+            excludePublishedArtifactsFromRemoteRepositories(coreConsumerMissingArtifact)
 
             def snapshotRepository = new File(externalRoot, 'repository-snapshot-only')
             def snapshotVersionDirectory = new File(
