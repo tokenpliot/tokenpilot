@@ -390,6 +390,17 @@ Verify the published Spring AI adapter API and the starter with one explicitly s
 ./gradlew verifyPublishedIntegrationConsumer
 ```
 
+Run the complete release-candidate gate, including module-local staging and
+binary/source/Javadoc/POM/module-metadata artifact checks:
+
+```bash
+./gradlew verifyReleaseCandidate
+```
+
+Use `-PprojectVersion=0.1.0` for the signed release-candidate path. Non-snapshot
+staging requires signing material; the default `0.0.1-SNAPSHOT` path is
+secretless.
+
 Run sample app after implementation work:
 
 ```bash
@@ -435,6 +446,12 @@ Stage and deploy a Central release:
 ```
 
 ## Update History
+
+### 2026-08-26
+
+- Added root publication aggregation and a release-candidate verification gate
+  that stages every public module and checks the complete artifact/signature
+  set for the selected version.
 
 ### 2026-08-25
 
