@@ -5,6 +5,6 @@ scrape_configs:
   - job_name: 'token-pilot-backend'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      # ECS용(localhost)과 로컬용(host.docker)을 둘 다 적습니다!
-      # 각 환경에서 접속되는 곳에서만 알아서 데이터를 빨아옵니다.
-      - targets: ['localhost:8080', 'host.docker.internal:8080']
+      # demo profile의 Spring Boot 앱은 호스트에서 실행하고,
+      # Prometheus는 host.docker.internal을 통해 scrape합니다.
+      - targets: ['host.docker.internal:8080']

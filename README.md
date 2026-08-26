@@ -2,7 +2,7 @@
 
 # TokenPilot
 
-> One Java gateway to control LLM providers, routing, fallback, tokens, and costs.
+> Java LLM control and accounting with optional provider adapters.
 
 TokenPilot helps Java applications control an LLM call before it is sent and
 reconcile its cost after it completes. It brings token estimation, context
@@ -56,6 +56,41 @@ notification, and Spring Boot autoconfiguration. For supported non-streaming
 Spring AI `ChatClient` calls, TokenPilot now performs conservative preflight,
 claims one provider dispatch, and reconciles provider-reported actual usage
 against the reservation-time pricing snapshot.
+
+## Documentation
+
+- [10-minute quickstart](docs/QUICKSTART.md) — choose Core or Starter and run the first verification path.
+- [Configuration reference](docs/CONFIGURATION.md) — properties, defaults, conditions, and failure modes.
+- [Metrics reference](docs/METRICS.md) — Token Pilot-owned meters and legacy compatibility policy.
+- [Sample app runbook](docs/SAMPLE_RUNBOOK.md) — local app, Prometheus, Grafana, and troubleshooting commands.
+- [Deterministic demo runbook](token-pilot-sample-app/DEMO_RUNBOOK.md) — eight admission, reservation, idempotency, release, and reconciliation scenarios.
+- [Release procedure](docs/RELEASE.md) — staging, signing, external consumer, and Central Portal gates.
+- [30-day MVP cutline](docs/30_DAY_MVP_REPORT.md) and [post-MVP evolution plan](docs/EVOLUTION_PLAN.md).
+
+## Sample demo
+
+The sample app exposes a deterministic `demo` profile for checking the control
+and accounting lifecycle from HTTP. It covers context admission, atomic budget
+reservation, idempotency, release, successful reconciliation, and pending
+reconciliation results.
+
+```bash
+./gradlew --no-daemon :token-pilot-sample-app:bootRun \
+  --args='--spring.profiles.active=demo'
+
+curl -s http://localhost:8080/test/token-pilot/demo/run | jq
+```
+
+The demo returns eight `PASS` scenario results and a snapshot of the current
+Token Pilot-owned metrics. Prometheus and Grafana can be started with:
+
+```bash
+docker compose -f token-pilot-sample-app/docker-compose.yml up --build -d
+```
+
+See [QUICKSTART.md](docs/QUICKSTART.md) for the ten-minute path and
+[SAMPLE_RUNBOOK.md](docs/SAMPLE_RUNBOOK.md) for endpoint and troubleshooting
+details.
 
 ## Micrometer metrics
 
@@ -183,11 +218,10 @@ Boot, Spring AI, Micrometer, or Reactor dependencies. Spring Boot 3, Spring AI
 1.x, other Spring Boot/Spring AI patch combinations, and older Java runtimes
 are not part of the 0.1.0 support guarantee.
 
-The verified Spring AI path is the synchronous `ChatClient` call lifecycle with
-a fake provider, including preflight blocking, atomic reservation, dispatch,
-and estimate/actual reconciliation. Real-provider compatibility, chunk
-accounting, streaming cancellation, and partial-usage reconciliation are not
-included in this compatibility claim.
+The Spring AI path includes the synchronous `ChatClient` call lifecycle with
+preflight blocking, atomic reservation, dispatch, and estimate/actual
+reconciliation. Chunk accounting, streaming cancellation, and partial-usage
+reconciliation remain outside the current lifecycle.
 
 If a provider returns a model different from the request pricing snapshot,
 TokenPilot keeps the estimate as `PRICING_RECONCILIATION_REQUIRED` instead of
