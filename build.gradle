@@ -303,6 +303,87 @@ subprojects {
     }
 }
 
+def stagingPublicationTasks = publishedModuleDescriptions.keySet().collect {
+    ":${it}:publishAllPublicationsToStagingRepository"
+}
+
+tasks.register('publishAllPublicationsToStagingRepository') {
+    group = 'publishing'
+    description = 'Publishes every public Token Pilot module to its module-local staging repository.'
+    dependsOn stagingPublicationTasks
+}
+
+tasks.register('verifyReleaseCandidate') {
+    group = 'verification'
+    description = 'Runs release checks, stages every public module, and verifies the complete artifact set.'
+    dependsOn subprojects.collect { "${it.path}:test" }
+    dependsOn tasks.named('check')
+    dependsOn tasks.named('publishAllPublicationsToStagingRepository')
+
+    doLast {
+        def version = project.version.toString()
+        def requiredArtifacts = [
+            'binary JAR': { String name ->
+                name.endsWith('.jar') &&
+                    !name.endsWith('-sources.jar') &&
+                    !name.endsWith('-javadoc.jar')
+            },
+            'sources JAR': { String name -> name.endsWith('-sources.jar') },
+            'Javadoc JAR': { String name -> name.endsWith('-javadoc.jar') },
+            'POM': { String name -> name.endsWith('.pom') },
+            'Gradle module metadata': { String name -> name.endsWith('.module') }
+        ]
+        def requiredSignatures = [
+            'binary JAR signature': { String name ->
+                name.endsWith('.jar.asc') &&
+                    !name.endsWith('-sources.jar.asc') &&
+                    !name.endsWith('-javadoc.jar.asc')
+            },
+            'sources JAR signature': { String name -> name.endsWith('-sources.jar.asc') },
+            'Javadoc JAR signature': { String name -> name.endsWith('-javadoc.jar.asc') },
+            'POM signature': { String name -> name.endsWith('.pom.asc') },
+            'Gradle module metadata signature': { String name -> name.endsWith('.module.asc') }
+        ]
+
+        publishedModuleDescriptions.keySet().each { moduleName ->
+            def moduleProject = project(":${moduleName}")
+            def versionDirectory = moduleProject.file(
+                "build/staging-deploy/cloud/token-pilot/${moduleName}/${version}"
+            )
+            if (!versionDirectory.isDirectory()) {
+                throw new GradleException(
+                    "${moduleName} staging directory is missing for version ${version}: ${versionDirectory}"
+                )
+            }
+
+            def artifactNames = versionDirectory.listFiles()
+                ?.findAll { it.isFile() }
+                ?.collect { it.name } ?: []
+            def missingArtifacts = requiredArtifacts.findAll { label, matcher ->
+                !artifactNames.any { artifactName -> matcher(artifactName) }
+            }.keySet()
+            if (!missingArtifacts.isEmpty()) {
+                throw new GradleException(
+                    "${moduleName}:${version} is missing published artifacts: ${missingArtifacts}"
+                )
+            }
+
+            if (!version.endsWith('-SNAPSHOT')) {
+                def missingSignatures = requiredSignatures.findAll { label, matcher ->
+                    !artifactNames.any { artifactName -> matcher(artifactName) }
+                }.keySet()
+                if (!missingSignatures.isEmpty()) {
+                    throw new GradleException(
+                        "${moduleName}:${version} is missing release signatures: ${missingSignatures}"
+                    )
+                }
+            }
+        }
+
+        println "Verified ${publishedModuleDescriptions.size()} Token Pilot release candidates at ${version}."
+    }
+}
+
 def publicationPomTasks = publishedModuleDescriptions.keySet().collect {
     ":${it}:generatePomFileForMavenJavaPublication"
 }
@@ -346,6 +427,7 @@ tasks.register('verifyPublicationMetadata') {
                 .asFile
             def pom = new XmlSlurper(false, false).parse(pomFile)
 
+            requirePomValue(moduleName, 'version', pom.version.text(), project.version.toString())
             requirePomValue(moduleName, 'name', pom.name.text(), moduleName)
             requirePomValue(moduleName, 'description', pom.description.text(), moduleDescription)
             requirePomValue(moduleName, 'url', pom.url.text(), 'https://github.com/tokenpliot/tokenpilot')
