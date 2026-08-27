@@ -403,6 +403,17 @@ Verify the published Spring AI adapter API and the starter with one explicitly s
 ./gradlew verifyPublishedIntegrationConsumer
 ```
 
+Verify isolated external Core and Starter consumers from the exact staged
+version, including dependency evidence and expected negative failures:
+
+```bash
+./gradlew verifyExternalConsumers -PprojectVersion=0.1.0
+```
+
+The protected manual release-candidate workflow runs this gate with signing
+secrets in the `release` environment. Pull-request CI remains secretless and
+uses the default snapshot version.
+
 Run the complete release-candidate gate, including module-local staging and
 binary/source/Javadoc/POM/module-metadata artifact checks:
 
@@ -469,6 +480,9 @@ Stage and deploy a Central release:
   ChatModel, public admission/reservation/idempotency/reconciliation scenarios,
   integration coverage, a Token Pilot Prometheus/Grafana dashboard, and a
   deterministic verification runbook.
+- Added isolated external Core/Starter consumer verification with fresh cache,
+  dependency evidence, negative artifact/version scenarios, and a protected
+  0.1.0 release-candidate workflow.
 
 ### 2026-08-25
 

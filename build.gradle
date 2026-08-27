@@ -1,7 +1,18 @@
 import groovy.json.JsonSlurper
 import groovy.xml.XmlSlurper
+import java.io.ByteArrayOutputStream
+import java.nio.file.Files
+import javax.inject.Inject
+import org.gradle.api.DefaultTask
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.process.ExecOperations
 import java.util.jar.JarFile
+import java.util.regex.Matcher
+
+abstract class ExternalConsumerVerificationTask extends DefaultTask {
+    @Inject
+    abstract ExecOperations getExecOperations()
+}
 
 plugins {
     id 'java'
@@ -801,6 +812,7 @@ tasks.register('prepareCoreConsumer') {
     description = 'Generates a repository-external-style Java 25 consumer for the published core artifact.'
     dependsOn ':token-pilot-core:publishMavenJavaPublicationToStagingRepository'
     outputs.dir(coreConsumerDirectory)
+    outputs.upToDateWhen { false }
 
     doLast {
         def consumerDirectory = coreConsumerDirectory.get().asFile
@@ -1547,4 +1559,524 @@ tasks.named('check') {
     dependsOn tasks.named('verifyCoreConsumer')
     dependsOn tasks.named('verifyMicrometerConsumer')
     dependsOn tasks.named('verifyPublishedIntegrationConsumer')
+}
+
+def externalConsumerReportDirectory = layout.buildDirectory.dir('reports/external-consumers')
+
+tasks.register('verifyExternalConsumers', ExternalConsumerVerificationTask) {
+    group = 'verification'
+    description = 'Builds isolated Core and Starter consumers from the exact staged artifact version.'
+    dependsOn tasks.named('prepareCoreConsumer')
+    dependsOn tasks.named('preparePublishedIntegrationConsumer')
+    outputs.dir(externalConsumerReportDirectory)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        def version = project.version.toString()
+        def externalDependencyRepository = providers.gradleProperty(
+            'externalConsumerMavenRepository'
+        ).orElse('https://repo.maven.apache.org/maven2').get()
+        if (!externalDependencyRepository.startsWith('https://') ||
+            externalDependencyRepository.contains("'")) {
+            throw new GradleException(
+                'externalConsumerMavenRepository must be an HTTPS URL without single quotes.'
+            )
+        }
+        def reportDirectory = new File(
+            externalConsumerReportDirectory.get().asFile,
+            version
+        )
+        delete(reportDirectory)
+        reportDirectory.mkdirs()
+
+        def externalRoot = Files.createTempDirectory(
+            "token-pilot-external-consumer-${version.replaceAll('[^A-Za-z0-9.-]', '-')}-"
+        ).toFile()
+        def checkoutPath = rootProject.projectDir.canonicalFile.toPath()
+        if (externalRoot.canonicalFile.toPath().startsWith(checkoutPath)) {
+            delete(externalRoot)
+            throw new GradleException(
+                "External consumer directory must be outside the checkout: ${externalRoot}"
+            )
+        }
+
+        def copyGeneratedConsumer = { File source, File target ->
+            target.mkdirs()
+            project.copy {
+                from source
+                into target
+                exclude '**/build/**'
+                exclude '**/.gradle/**'
+            }
+        }
+
+        def rewriteRepository = { File consumerDirectory, String repositoryUri ->
+            fileTree(consumerDirectory).matching {
+                include '**/*.gradle'
+            }.files.each { buildFile ->
+                def original = buildFile.getText('UTF-8')
+                def rewritten = original.replaceAll(
+                    "file:[^']*/build/staging-deploy/?",
+                    Matcher.quoteReplacement(repositoryUri)
+                )
+                if (rewritten != original) {
+                    buildFile.setText(rewritten, 'UTF-8')
+                }
+                if (externalDependencyRepository != 'https://repo.maven.apache.org/maven2') {
+                    def mirrorRepository = "maven { url = uri('${externalDependencyRepository}') }"
+                    def withMirror = rewritten
+                        .replace(
+                            'mavenCentral()',
+                            "${mirrorRepository}\n    mavenCentral()"
+                        )
+                        .replace(
+                            'mavenCentral {',
+                            "${mirrorRepository}\n    mavenCentral {"
+                        )
+                    if (withMirror != rewritten) {
+                        buildFile.setText(withMirror, 'UTF-8')
+                    }
+                }
+            }
+        }
+
+        def replaceRepository = {
+            File consumerDirectory,
+            String sourceRepositoryUri,
+            String targetRepositoryUri
+            ->
+            fileTree(consumerDirectory).matching {
+                include '**/*.gradle'
+            }.files.each { buildFile ->
+                def original = buildFile.getText('UTF-8')
+                def rewritten = original.replace(sourceRepositoryUri, targetRepositoryUri)
+                if (rewritten != original) {
+                    buildFile.setText(rewritten, 'UTF-8')
+                }
+            }
+        }
+
+        def excludePublishedArtifactsFromRemoteRepositories = { File consumerDirectory ->
+            fileTree(consumerDirectory).matching {
+                include '**/*.gradle'
+            }.files.each { buildFile ->
+                def original = buildFile.getText('UTF-8')
+                def restricted = original.replace(
+                    'mavenCentral()',
+                    """mavenCentral {
+    content {
+        excludeGroup 'cloud.token-pilot'
+    }
+}""".stripIndent()
+                )
+                if (externalDependencyRepository != 'https://repo.maven.apache.org/maven2') {
+                    def remoteRepository = "maven { url = uri('${externalDependencyRepository}') }"
+                    restricted = restricted.replace(
+                        remoteRepository,
+                        """maven {
+    url = uri('${externalDependencyRepository}')
+    content {
+        excludeGroup 'cloud.token-pilot'
+    }
+}""".stripIndent()
+                    )
+                }
+                if (restricted != original) {
+                    buildFile.setText(restricted, 'UTF-8')
+                }
+            }
+        }
+
+        def appendText = { File file, String text ->
+            file.setText(file.getText('UTF-8') + text, 'UTF-8')
+        }
+
+        def configureCoreTestHarness = { File consumerDirectory, String repositoryUri ->
+            appendText(
+                new File(consumerDirectory, 'build.gradle'),
+                """
+
+configurations.configureEach {
+    resolutionStrategy.failOnVersionConflict()
+}
+
+tasks.register('consumerTest', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'compatibility.CoreConsumerTest'
+}
+
+tasks.named('test') {
+    dependsOn tasks.named('consumerTest')
+    failOnNoDiscoveredTests = false
+}
+""".stripIndent()
+            )
+            def testSourceDirectory = new File(
+                consumerDirectory,
+                'src/test/java/compatibility'
+            )
+            testSourceDirectory.mkdirs()
+            new File(testSourceDirectory, 'CoreConsumerTest.java').setText("""
+package compatibility;
+
+import io.tokenpilot.core.CoreComponents;
+import io.tokenpilot.core.domain.TokenCountScope;
+
+public final class CoreConsumerTest {
+    private CoreConsumerTest() {
+    }
+
+    public static void main(String[] args) {
+        var result = CoreComponents.utf8ByteHeuristicTokenEstimator().estimate("hello");
+
+        if (result.tokens().orElseThrow() != 2L ||
+            result.scope() != TokenCountScope.TEXT_ONLY ||
+            result.isExact()) {
+            throw new IllegalStateException("Published Core API returned an unexpected token result");
+        }
+        System.out.println("token-pilot-core external consumer test OK");
+    }
+}
+""".stripIndent(), 'UTF-8')
+            rewriteRepository(consumerDirectory, repositoryUri)
+        }
+
+        def configureIntegrationTestHarness = { File consumerDirectory ->
+            def testSourceDirectory = new File(
+                consumerDirectory,
+                'starter/src/test/java/compatibility'
+            )
+            testSourceDirectory.mkdirs()
+            new File(testSourceDirectory, 'StarterConsumerTest.java').setText("""
+package compatibility;
+
+import io.tokenpilot.springai.LedgerAdvisor;
+import java.util.Map;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.context.ConfigurableApplicationContext;
+
+public final class StarterConsumerTest {
+    private StarterConsumerTest() {
+    }
+
+    public static void main(String[] args) {
+        SpringApplication application = new SpringApplication(StarterConsumer.class);
+        application.setWebApplicationType(WebApplicationType.NONE);
+        application.setLogStartupInfo(false);
+        application.setDefaultProperties(Map.of(
+            "spring.ai.openai.api-key", "published-consumer-test-key",
+            "token-pilot.budget.enabled", "true",
+            "token-pilot.notification.enabled", "true",
+            "token-pilot.metrics.enabled", "false"
+        ));
+
+        try (ConfigurableApplicationContext context = application.run()) {
+            if (context.getBean(LedgerAdvisor.class) == null ||
+                context.getBean(OpenAiChatModel.class) == null) {
+                throw new IllegalStateException("Published Starter context is missing expected beans");
+            }
+        }
+        System.out.println("token-pilot-starter external consumer test OK");
+    }
+}
+""".stripIndent(), 'UTF-8')
+            appendText(
+                new File(consumerDirectory, 'starter/build.gradle'),
+                """
+
+tasks.register('consumerTest', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'compatibility.StarterConsumerTest'
+}
+
+tasks.named('test') {
+    dependsOn tasks.named('consumerTest')
+    failOnNoDiscoveredTests = false
+}
+""".stripIndent()
+            )
+        }
+
+        def executeGradle = {
+            File consumerDirectory,
+            File gradleUserHome,
+            File reportFile,
+            List<String> arguments,
+            boolean expectedSuccess
+            ->
+            def output = new ByteArrayOutputStream()
+            def result = execOperations.exec {
+                workingDir consumerDirectory
+                environment 'GRADLE_USER_HOME', gradleUserHome.absolutePath
+                commandLine([rootProject.file('gradlew').absolutePath] + arguments)
+                standardOutput = output
+                errorOutput = output
+                ignoreExitValue = true
+            }
+            reportFile.parentFile.mkdirs()
+            reportFile.setText(output.toString('UTF-8'), 'UTF-8')
+            def succeeded = result.exitValue == 0
+            if (succeeded != expectedSuccess) {
+                throw new GradleException(
+                    "External consumer command ${arguments} ${expectedSuccess ? 'failed' : 'unexpectedly passed'}. " +
+                        "See ${reportFile}.\n${output.toString('UTF-8')}"
+                )
+            }
+            result.exitValue
+        }
+
+        try {
+            def repository = new File(externalRoot, 'repository')
+            repository.mkdirs()
+            publishedModuleDescriptions.keySet().each { moduleName ->
+                def moduleProject = project(":${moduleName}")
+                def stagedVersionDirectory = moduleProject.file(
+                    "build/staging-deploy/cloud/token-pilot/${moduleName}/${version}"
+                )
+                if (!stagedVersionDirectory.isDirectory()) {
+                    throw new GradleException(
+                        "Missing staged ${moduleName}:${version} at ${stagedVersionDirectory}"
+                    )
+                }
+                def repositoryVersionDirectory = new File(
+                    repository,
+                    "cloud/token-pilot/${moduleName}/${version}"
+                )
+                repositoryVersionDirectory.mkdirs()
+                project.copy {
+                    from stagedVersionDirectory
+                    into repositoryVersionDirectory
+                }
+            }
+
+            def releaseArtifactManifest = new File(reportDirectory, 'repository-manifest.txt')
+            releaseArtifactManifest.setText(
+                fileTree(repository).files.collect {
+                    repository.toPath().relativize(it.toPath()).toString()
+                }.sort().join(System.lineSeparator()) + System.lineSeparator(),
+                'UTF-8'
+            )
+
+            def corePomFile = new File(
+                repository,
+                "cloud/token-pilot/token-pilot-core/${version}/token-pilot-core-${version}.pom"
+            )
+            def corePom = new XmlSlurper(false, false).parse(corePomFile)
+            if (corePom.version.text() != version) {
+                throw new GradleException(
+                    "External Core POM version must be ${version}, but was ${corePom.version.text()}"
+                )
+            }
+            def forbiddenCorePomDependencies = corePom.depthFirst().findAll { node ->
+                node.name() == 'dependency' && [
+                    'org.springframework',
+                    'org.springframework.ai',
+                    'io.micrometer',
+                    'io.projectreactor'
+                ].any { forbiddenGroup ->
+                    node.groupId.text() == forbiddenGroup ||
+                        node.groupId.text().startsWith("${forbiddenGroup}.")
+                }
+            }
+            if (!forbiddenCorePomDependencies.isEmpty() ||
+                corePom.dependencyManagement.dependencies.dependency.any { dependency ->
+                    [
+                        'org.springframework',
+                        'org.springframework.ai',
+                        'io.micrometer',
+                        'io.projectreactor'
+                    ].any { forbiddenGroup ->
+                        dependency.groupId.text() == forbiddenGroup ||
+                            dependency.groupId.text().startsWith("${forbiddenGroup}.")
+                    }
+                }) {
+                throw new GradleException(
+                    'External Core POM must remain free of framework dependencies and BOM management.'
+                )
+            }
+
+            def coreConsumer = new File(externalRoot, 'core-consumer')
+            def coreConsumerMissingArtifact = new File(
+                externalRoot,
+                'core-consumer-missing-artifact'
+            )
+            def coreConsumerSnapshotOnly = new File(
+                externalRoot,
+                'core-consumer-snapshot-only'
+            )
+            def repositoryUri = repository.toURI().toString()
+            [
+                coreConsumer,
+                coreConsumerMissingArtifact,
+                coreConsumerSnapshotOnly
+            ].each { consumerDirectory ->
+                copyGeneratedConsumer(
+                    coreConsumerDirectory.get().asFile,
+                    consumerDirectory
+                )
+                configureCoreTestHarness(consumerDirectory, repositoryUri)
+            }
+
+            def integrationConsumer = new File(externalRoot, 'starter-consumer')
+            copyGeneratedConsumer(
+                publishedIntegrationConsumerDirectory.get().asFile,
+                integrationConsumer
+            )
+            configureIntegrationTestHarness(integrationConsumer)
+            rewriteRepository(integrationConsumer, repositoryUri)
+
+            def consumerFiles = [coreConsumer, integrationConsumer].collectMany { consumerDirectory ->
+                fileTree(consumerDirectory).matching {
+                    include '**/*.gradle'
+                    include '**/*.java'
+                    include 'settings.gradle'
+                }.files
+            }
+            def forbiddenConsumerTokens = ['project(', 'includeBuild', 'mavenLocal()']
+            def forbiddenConsumerFiles = consumerFiles.findAll { consumerFile ->
+                def content = consumerFile.getText('UTF-8')
+                forbiddenConsumerTokens.any { token -> content.contains(token) } ||
+                    content.contains(rootProject.projectDir.absolutePath)
+            }
+            if (!forbiddenConsumerFiles.isEmpty()) {
+                throw new GradleException(
+                    "Isolated consumers contain checkout/source dependency configuration: ${forbiddenConsumerFiles}"
+                )
+            }
+
+            def missingRepository = new File(externalRoot, 'repository-missing-artifact')
+            project.copy {
+                from repository
+                into missingRepository
+            }
+            def coreArtifact = new File(
+                missingRepository,
+                "cloud/token-pilot/token-pilot-core/${version}/token-pilot-core-${version}.jar"
+            )
+            if (!coreArtifact.delete()) {
+                throw new GradleException("Could not remove negative-test artifact ${coreArtifact}")
+            }
+            replaceRepository(
+                coreConsumerMissingArtifact,
+                repository.toURI().toString(),
+                missingRepository.toURI().toString()
+            )
+            excludePublishedArtifactsFromRemoteRepositories(coreConsumerMissingArtifact)
+
+            def snapshotRepository = new File(externalRoot, 'repository-snapshot-only')
+            def snapshotVersionDirectory = new File(
+                snapshotRepository,
+                'cloud/token-pilot/token-pilot-core/0.0.1-SNAPSHOT'
+            )
+            snapshotVersionDirectory.mkdirs()
+            project.copy {
+                from new File(
+                    repository,
+                    "cloud/token-pilot/token-pilot-core/${version}"
+                )
+                into snapshotVersionDirectory
+            }
+            replaceRepository(
+                coreConsumerSnapshotOnly,
+                repository.toURI().toString(),
+                snapshotRepository.toURI().toString()
+            )
+
+            def coreCache = new File(externalRoot, 'gradle-home-core')
+            def starterCache = new File(externalRoot, 'gradle-home-starter')
+            def negativeCache = new File(externalRoot, 'gradle-home-negative')
+
+            executeGradle(
+                coreConsumer,
+                coreCache,
+                new File(reportDirectory, 'core-consumer.log'),
+                ['--no-daemon', '--console=plain', 'test', 'run'],
+                true
+            )
+            def coreDependencyReport = new File(
+                reportDirectory,
+                'core-runtime-dependencies.txt'
+            )
+            executeGradle(
+                coreConsumer,
+                coreCache,
+                coreDependencyReport,
+                ['--no-daemon', '--console=plain', 'dependencies', '--configuration', 'runtimeClasspath'],
+                true
+            )
+            def coreDependencyText = coreDependencyReport.getText('UTF-8')
+            def forbiddenCoreRuntimeGroups = [
+                'org.springframework',
+                'org.springframework.ai',
+                'io.micrometer',
+                'io.projectreactor'
+            ].findAll { coreDependencyText.contains(it) }
+            if (!forbiddenCoreRuntimeGroups.isEmpty()) {
+                throw new GradleException(
+                    "External Core runtime graph contains forbidden groups: ${forbiddenCoreRuntimeGroups}"
+                )
+            }
+
+            executeGradle(
+                integrationConsumer,
+                starterCache,
+                new File(reportDirectory, 'starter-consumer.log'),
+                [
+                    '--no-daemon',
+                    '--console=plain',
+                    ':starter:test',
+                    ':adapter:run',
+                    ':starter:run',
+                    ':adapter-pom:run',
+                    ':starter-pom:run'
+                ],
+                true
+            )
+            executeGradle(
+                integrationConsumer,
+                starterCache,
+                new File(reportDirectory, 'starter-runtime-dependencies.txt'),
+                [
+                    '--no-daemon',
+                    '--console=plain',
+                    ':starter:dependencies',
+                    '--configuration',
+                    'runtimeClasspath'
+                ],
+                true
+            )
+
+            executeGradle(
+                coreConsumerMissingArtifact,
+                negativeCache,
+                new File(reportDirectory, 'negative-missing-artifact.log'),
+                ['--no-daemon', '--console=plain', 'run'],
+                false
+            )
+            executeGradle(
+                coreConsumerSnapshotOnly,
+                negativeCache,
+                new File(reportDirectory, 'negative-snapshot-only.log'),
+                ['--no-daemon', '--console=plain', '--offline', 'run'],
+                false
+            )
+
+            new File(reportDirectory, 'summary.txt').setText("""
+version=${version}
+externalRepository=${repository}
+coreConsumerTest=PASS
+starterConsumerTest=PASS
+coreDependencyGraph=framework-free
+missingArtifactScenario=FAILS_AS_EXPECTED
+snapshotOnlyScenario=FAILS_AS_EXPECTED
+""".stripIndent(), 'UTF-8')
+            println "Verified isolated Core and Starter consumers for ${version}; evidence: ${reportDirectory}"
+        } finally {
+            delete(externalRoot)
+        }
+    }
 }
