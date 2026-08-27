@@ -1,12 +1,12 @@
 # token-pilot-sample-app/Dockerfile
 
 # ==========================================
-# 실행 환경 (Java 25 규격 적용) - 빌드는 GitHub Actions가 담당
+# Runtime environment (Java 25); GitHub Actions performs the build.
 # ==========================================
 FROM eclipse-temurin:25-jre
 WORKDIR /app
 
-# 깃허브 액션이 미리 빌드해둔 jar 파일을 컨테이너 내부로 복사
+# Copy the JAR prebuilt by GitHub Actions into the container.
 COPY token-pilot-sample-app/build/libs/*SNAPSHOT.jar ./app.jar
 
 EXPOSE 8080

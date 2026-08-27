@@ -1,6 +1,6 @@
 package io.tokenpilot.budget.internal;
 
-/** 예약 금액이 해제된 경로입니다. */
+/** Path on which the reserved amount was released. */
 enum ReleaseType {
     BEFORE_DISPATCH,
     CONFIRMED_UNBILLED

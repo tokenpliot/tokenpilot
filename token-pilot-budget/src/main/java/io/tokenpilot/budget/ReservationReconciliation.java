@@ -8,7 +8,7 @@ import java.util.Currency;
 import java.util.Objects;
 
 /**
- * 한 예약의 estimate와 actual 비용을 연결한 회계 정산 결과입니다.
+ * Accounting settlement result linking one reservation's estimate and actual cost.
  */
 public record ReservationReconciliation(
         String requestId,
@@ -16,9 +16,9 @@ public record ReservationReconciliation(
         ReservationId reservationId,
         BudgetKey budgetKey,
         String responseModelId,
-        /** 예약 시점에 estimate를 계산한 request pricing snapshot입니다. */
+        /** Request pricing snapshot used to calculate the estimate at reservation time. */
         PricingSnapshot pricingSnapshot,
-        /** provider response model의 actual 비용 계산에 사용한 pricing snapshot입니다. */
+        /** Pricing snapshot used to calculate actual cost for the provider response model. */
         PricingSnapshot actualPricingSnapshot,
         ReservationTokenEstimate tokenEstimate,
         ReservationActualTokens actualTokens,
@@ -65,8 +65,9 @@ public record ReservationReconciliation(
     }
 
     /**
-     * 기존 request pricing snapshot만 사용한 정산 결과를 만드는 호환 생성자입니다.
-     * request와 response model이 같은 기존 경로에서는 두 snapshot이 동일합니다.
+     * Compatibility constructor that creates a settlement result using only the
+     * existing request pricing snapshot. In the existing path where request and
+     * response models are the same, both snapshots are identical.
      */
     public ReservationReconciliation(
             String requestId,
@@ -118,32 +119,32 @@ public record ReservationReconciliation(
         );
     }
 
-    /** 예약 시점 pricing snapshot의 request model입니다. */
+    /** Request model in the reservation-time pricing snapshot. */
     public String requestModelId() {
         return pricingSnapshot.modelId();
     }
 
-    /** actual provider usage에 적용한 response model pricing policy입니다. */
+    /** Pricing policy applied to actual provider usage for the response model. */
     public String actualPricingPolicyId() {
         return actualPricingSnapshot.pricingPolicyId();
     }
 
-    /** actual provider usage에 적용한 response model catalog version입니다. */
+    /** Catalog version applied to actual provider usage for the response model. */
     public String actualCatalogVersion() {
         return actualPricingSnapshot.catalogVersion();
     }
 
-    /** 예약 시점 pricing policy 식별자입니다. */
+    /** Pricing policy identifier at reservation time. */
     public String pricingPolicyId() {
         return pricingSnapshot.pricingPolicyId();
     }
 
-    /** 예약 시점 model catalog version입니다. */
+    /** Model catalog version at reservation time. */
     public String catalogVersion() {
         return pricingSnapshot.catalogVersion();
     }
 
-    /** actual에서 estimate를 뺀 signed 비용 차이입니다. */
+    /** Signed cost difference obtained by subtracting the estimate from actual cost. */
     public BigDecimal delta() {
         return actual.value().subtract(estimate.value());
     }
@@ -170,7 +171,7 @@ public record ReservationReconciliation(
         return Math.subtractExact(actualTokens.totalTokens(), estimatedTotal);
     }
 
-    /** estimate와 actual이 사용하는 통화입니다. */
+    /** Currency used by the estimate and actual cost. */
     public Currency currency() {
         return actual.currency();
     }

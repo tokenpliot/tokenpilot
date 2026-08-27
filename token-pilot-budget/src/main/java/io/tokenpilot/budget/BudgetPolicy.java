@@ -6,15 +6,15 @@ import java.time.ZoneId;
 import java.util.Objects;
 
 /**
- * 월별 예산 key 생성과 금액 검증에 사용하는 정책 snapshot입니다.
- * 대상 tag가 없고 {@code fallbackTargetId}도 설정되지 않으면 평가는 fail-closed 됩니다.
+ * Policy snapshot used to create monthly budget keys and validate amounts.
+ * Evaluation fails closed when the target tag and {@code fallbackTargetId} are both absent.
  *
- * @param id 정책 식별자
- * @param targetType 예산 대상 종류
- * @param targetTagKey 대상 식별자를 읽을 tag key
- * @param fallbackTargetId 누락된 대상에 사용할 명시적 fallback, 미설정 시 {@code null}
- * @param monthlyLimit 통화를 포함한 월별 한도
- * @param zoneId 월 경계를 계산할 시간대
+ * @param id policy identifier
+ * @param targetType budget target type
+ * @param targetTagKey tag key from which to read the target identifier
+ * @param fallbackTargetId explicit fallback for a missing target, or {@code null} when unset
+ * @param monthlyLimit monthly limit including its currency
+ * @param zoneId time zone used to calculate month boundaries
  */
 public record BudgetPolicy(
     String id,

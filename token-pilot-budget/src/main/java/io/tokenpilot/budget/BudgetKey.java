@@ -3,12 +3,12 @@ package io.tokenpilot.budget;
 import java.util.Objects;
 
 /**
- * 월별 예산 bucket을 식별하는 불변 key입니다.
+ * Immutable key identifying a monthly budget bucket.
  *
- * @param policyId  예산 정책 식별자
- * @param targetType 예산 대상 종류
- * @param targetId   예산 대상 식별자
- * @param window     월별 예산 기간
+ * @param policyId  budget policy identifier
+ * @param targetType budget target type
+ * @param targetId   budget target identifier
+ * @param window     monthly budget period
  */
 public record BudgetKey(
     String policyId,

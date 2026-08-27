@@ -7,8 +7,9 @@ import org.springframework.ai.chat.client.advisor.api.BaseAdvisor;
 import org.springframework.core.Ordered;
 
 /**
- * ChatClient 호출 시 토큰 사용량을 가로채서 기록하는 어드바이저 인터페이스.
- * Spring AI의 {@link BaseAdvisor}를 상속하여 AI 호출 전후 처리 로직을 표준 방식으로 정의합니다.
+ * Advisor interface that intercepts and records token usage during ChatClient calls.
+ * Extends Spring AI's {@link BaseAdvisor} to define standard processing before
+ * and after an AI call.
  */
 public interface LedgerAdvisor extends BaseAdvisor {
 

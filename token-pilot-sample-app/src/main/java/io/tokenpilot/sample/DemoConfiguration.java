@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
-/** API key 없이 sample app을 실행하는 demo profile의 Spring AI 구성입니다. */
+/** Spring AI configuration for running the sample app in the demo profile without an API key. */
 @Configuration(proxyBeanMethods = false)
 @Profile("demo")
 public class DemoConfiguration {

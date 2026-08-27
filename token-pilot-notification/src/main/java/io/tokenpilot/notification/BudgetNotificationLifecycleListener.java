@@ -1,6 +1,6 @@
 package io.tokenpilot.notification;
 
-/** Budget notification lifecycle을 best-effort로 관찰하는 framework-independent 계약입니다. */
+/** Framework-independent contract for best-effort observation of the budget notification lifecycle. */
 @FunctionalInterface
 public interface BudgetNotificationLifecycleListener {
 

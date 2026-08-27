@@ -52,6 +52,30 @@ is `TEXT_ONLY`; media, tool messages or schemas, structured-output
 augmentation, and enforcement-enabled streaming are rejected before
 reservation when they cannot be represented by the supported contract.
 
+## Sample OpenAI smoke profile
+
+The repository sample app selects an actual provider only when the
+`openai-smoke` profile is active. The provider dependency is application-owned:
+
+```gradle
+implementation 'cloud.token-pilot:token-pilot-starter:0.0.1-SNAPSHOT'
+implementation 'org.springframework.ai:spring-ai-starter-model-openai:2.0.0'
+```
+
+The profile reads `OPENAI_API_KEY` and `OPENAI_MODEL` from the environment and
+uses a versioned catalog entry by default. Its Token Pilot pricing values are
+example rates per 1,000 tokens and should be replaced with the rates for the
+selected provider model before using the result as a financial record.
+
+The sample endpoint is:
+
+```text
+GET /test/token-pilot/openai-smoke
+```
+
+See [`docs/SAMPLE_RUNBOOK.md`](SAMPLE_RUNBOOK.md) for the demo-to-smoke
+sequence and the guarded live test command.
+
 ## Metrics
 
 | Property | Default | Meaning |

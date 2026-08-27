@@ -4,7 +4,8 @@ import io.tokenpilot.core.domain.TokenUsage;
 import org.springframework.ai.chat.client.ChatClientResponse;
 
 /**
- * AI 응답({@link ChatClientResponse})에서 토큰 사용량 정보를 추출하는 인터페이스.
+ * Interface for extracting token usage information from an AI response
+ * ({@link ChatClientResponse}).
  */
 public interface UsageExtractor {
     TokenUsage extract(ChatClientResponse response);

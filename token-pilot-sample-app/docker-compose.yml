@@ -1,10 +1,10 @@
 services:
   prometheus:
-    build: ./prometheus       # 👈 그라파나처럼 직접 굽기로 통일!
+    build: ./prometheus       # 👈 Use a local build consistently, like Grafana.
     container_name: prometheus
     ports:
       - "9090:9090"
-    extra_hosts:              # 👈 로컬 호스트(스프링 부트)와 통신하기 위한 뚫기
+    extra_hosts:              # 👈 Allow communication with the local Spring Boot host.
       - "host.docker.internal:host-gateway"
 
   grafana:
@@ -19,4 +19,4 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_AUTH_DISABLE_LOGIN_FORM=true    # 별도 로그인 없이 대시보드 조회
+      - GF_AUTH_DISABLE_LOGIN_FORM=true    # View the dashboard without a separate login form.

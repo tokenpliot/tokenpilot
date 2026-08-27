@@ -3,10 +3,10 @@ package io.tokenpilot.budget;
 import java.util.Objects;
 
 /**
- * 회계 listener callback 실패를 bounded 정보만으로 전달하는 이벤트입니다.
+ * Event carrying an accounting listener callback failure using only bounded information.
  *
- * <p>원본 예외와 메시지를 포함하지 않아 prompt, provider 응답 또는 자격 증명이
- * 관측 경로로 전달되지 않습니다.</p>
+ * <p>The original exception and message are excluded so prompts, provider
+ * responses, and credentials do not reach the observation path.</p>
  */
 public record ReservationAccountingListenerFailureEvent(
         ReservationAccountingListenerType listenerType,

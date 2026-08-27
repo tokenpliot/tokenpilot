@@ -7,7 +7,7 @@ import io.tokenpilot.micrometer.MetricsOptions;
 import java.util.Set;
 
 /**
- * Micrometer 메트릭 퍼블리셔 생성을 위한 팩토리 클래스입니다.
+ * Factory for creating Micrometer metric publishers.
  */
 public final class LedgerMicrometerComponents {
 

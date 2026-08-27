@@ -15,11 +15,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
- * UTF-8 byte 길이를 기반으로 문자열의 text-only token 수를 추정합니다.
+ * Estimates text-only token counts from UTF-8 byte length.
  *
- * <p>{@code BYTE_LEVEL_BPE_UTF8}는 byte-level tokenizer의 안전성 가정을
- * 나타내는 compatibility basis일 뿐, 이 구현이 exact BPE merge를 수행한다는
- * 뜻은 아닙니다. 결과는 전체 요청의 context admission 근거로 사용할 수 없습니다.</p>
+ * <p>{@code BYTE_LEVEL_BPE_UTF8} is only a compatibility basis representing a
+ * byte-level tokenizer safety assumption; this implementation does not perform
+ * exact BPE merges. The result cannot prove context admission for a complete request.</p>
  */
 final class HeuristicTokenEstimator implements TokenEstimator {
 
@@ -38,12 +38,12 @@ final class HeuristicTokenEstimator implements TokenEstimator {
             new TokenizationBasis(TOKENIZATION_BASIS_ID);
 
     /**
-     * 원문을 정규화하지 않고 UTF-8 byte 길이로 계산합니다.
+     * Counts UTF-8 byte length without normalizing the original text.
      *
-     * @param text 계산할 원문
-     * @return text-only 휴리스틱 token 계산 결과
-     * @throws NullPointerException     text가 null인 경우
-     * @throws IllegalArgumentException text에 malformed UTF-16이 포함된 경우
+     * @param text original text to count
+     * @return text-only heuristic token count result
+     * @throws NullPointerException     when text is null
+     * @throws IllegalArgumentException when text contains malformed UTF-16
      */
     @Override
     public TokenCountResult estimate(String text) {

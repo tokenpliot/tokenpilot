@@ -16,9 +16,9 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Micrometer 기반의 비용 메트릭 리스너.
- * {@link LedgerListener}를 구현하여 비용 기록 이벤트를 가로채고,
- * 이를 Prometheus 등 모니터링 시스템으로 전송합니다.
+ * Micrometer-based cost metric listener.
+ * Implements {@link LedgerListener} to intercept cost-recording events and
+ * publish them to monitoring systems such as Prometheus.
  */
 public class MicroCostMetricsPublisher implements LedgerListener {
 

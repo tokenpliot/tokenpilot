@@ -5,7 +5,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientBuilderCustomizer;
 
 /**
- * ChatClient.Builder에 LedgerAdvisor를 자동으로 주입하는 커스터마이저.
+ * Customizer that automatically injects LedgerAdvisor into ChatClient.Builder.
  */
 public class LedgerChatClientBuilderCustomizer implements ChatClientBuilderCustomizer {
 

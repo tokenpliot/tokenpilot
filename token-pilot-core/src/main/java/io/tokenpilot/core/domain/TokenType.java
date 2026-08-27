@@ -1,33 +1,33 @@
 package io.tokenpilot.core.domain;
 
 /**
- * AI 모델 호출 시 발생하는 토큰의 세부 유형.
+ * Detailed token types produced by an AI model call.
  */
 public enum TokenType {
-    /** 일반 입력 (Prompt) */
+    /** Regular input (prompt). */
     PROMPT,
-    /** 일반 출력 (Completion) */
+    /** Regular output (completion). */
     COMPLETION,
-    /** 추론 (Reasoning) - 주로 출력 계열 */
+    /** Reasoning tokens, usually part of the output category. */
     REASONING,
-    /** 캐시에서 읽은 입력 (Cache Read Prompt) */
+    /** Input read from the cache (cache-read prompt). */
     CACHE_READ_PROMPT,
-    /** 캐시에 새로 저장한 입력 (Cache Creation Prompt) */
+    /** Input newly stored in the cache (cache-creation prompt). */
     CACHE_CREATION_PROMPT;
 
     /**
-     * 해당 토큰 타입이 입력(Prompt) 계열인지 확인합니다.
+     * Returns whether this token type belongs to the input (prompt) category.
      *
-     * @return 입력 계열이면 {@code true}
+     * @return {@code true} when this is an input category
      */
     public boolean isPrompt() {
         return this == PROMPT || this == CACHE_READ_PROMPT || this == CACHE_CREATION_PROMPT;
     }
 
     /**
-     * 해당 토큰 타입이 출력(Completion) 계열인지 확인합니다.
+     * Returns whether this token type belongs to the output (completion) category.
      *
-     * @return 출력 계열이면 {@code true}
+     * @return {@code true} when this is an output category
      */
     public boolean isCompletion() {
         return this == COMPLETION || this == REASONING;

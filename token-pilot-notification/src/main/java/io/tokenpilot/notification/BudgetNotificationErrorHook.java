@@ -1,6 +1,6 @@
 package io.tokenpilot.notification;
 
-/** bounded/sanitized notification 오류를 관찰하는 best-effort hook입니다. */
+/** Best-effort hook for observing bounded and sanitized notification errors. */
 @FunctionalInterface
 public interface BudgetNotificationErrorHook {
 

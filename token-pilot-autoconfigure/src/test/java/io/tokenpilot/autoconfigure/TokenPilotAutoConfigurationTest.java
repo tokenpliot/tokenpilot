@@ -1104,7 +1104,7 @@ class TokenPilotAutoConfigurationTest {
         }
     }
 
-    // 테스트용 no-op handler - 실제 알림 전송 없이 빈 등록 여부만 검증
+    // Test-only no-op handler; verifies bean registration without sending notifications.
     @Configuration(proxyBeanMethods = false)
     static class FakeBudgetNotificationHandlerConfiguration {
         @Bean

@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Token Pilot의 설정을 담당하는 프로퍼티 클래스.
+ * Configuration properties for Token Pilot.
  */
 @ConfigurationProperties(prefix = "token-pilot")
 public class TokenPilotProperties {
@@ -186,7 +186,7 @@ public class TokenPilotProperties {
         }
 
         /**
-         * 대상 tag가 없을 때 사용할 명시적 fallback입니다. 미설정 시 평가는 fail-closed 됩니다.
+         * Explicit fallback used when the target tag is absent. Evaluation fails closed when it is unset.
          */
         public String getFallbackTargetId() {
             return fallbackTargetId;
@@ -205,7 +205,7 @@ public class TokenPilotProperties {
         }
 
         /**
-         * 월별 budget window 경계를 계산하는 IANA ZoneId입니다. 기본값은 UTC입니다.
+         * IANA ZoneId used to calculate monthly budget-window boundaries. The default is UTC.
          */
         public String getZoneId() {
             return zoneId;

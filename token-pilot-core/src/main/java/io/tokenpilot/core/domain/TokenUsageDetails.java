@@ -1,13 +1,13 @@
 package io.tokenpilot.core.domain;
 
 /**
- * 정규화된 전체 입력/출력 토큰에 포함되는 선택적 세부 사용량.
- * {@code null}은 provider가 값을 보고하지 않았음을, {@code 0}은 값을
- * 보고했으나 실제 사용량이 없었음을 뜻합니다.
+ * Optional usage details included in normalized inclusive input/output totals.
+ * {@code null} means the provider did not report a value, while {@code 0}
+ * means it reported the value but no tokens were used.
  *
- * @param cacheReadInputTokens     전체 입력에 포함된 cache read 토큰 또는 미보고 시 {@code null}
- * @param cacheCreationInputTokens 전체 입력에 포함된 cache creation 토큰 또는 미보고 시 {@code null}
- * @param reasoningOutputTokens    전체 출력에 포함된 reasoning 토큰 또는 미보고 시 {@code null}
+ * @param cacheReadInputTokens     cache-read tokens included in total input, or {@code null} when unreported
+ * @param cacheCreationInputTokens cache-creation tokens included in total input, or {@code null} when unreported
+ * @param reasoningOutputTokens    reasoning tokens included in total output, or {@code null} when unreported
  */
 public record TokenUsageDetails(
         Long cacheReadInputTokens,
@@ -15,9 +15,9 @@ public record TokenUsageDetails(
         Long reasoningOutputTokens
 ) {
     /**
-     * 모든 세부 토큰 수가 0 이상인지 검증합니다.
+     * Validates that every detail token count is non-negative.
      *
-     * @throws IllegalArgumentException 세부 토큰 수가 음수인 경우
+     * @throws IllegalArgumentException when a detail token count is negative
      */
     public TokenUsageDetails {
         isEmptyToken(cacheReadInputTokens);
@@ -26,9 +26,9 @@ public record TokenUsageDetails(
     }
 
     /**
-     * provider가 세부 사용량을 보고하지 않은 상태를 생성합니다.
+     * Creates a state in which the provider reported no usage details.
      *
-     * @return 모든 세부량이 미보고 상태인 객체
+     * @return an object with all details marked as unreported
      */
     public static TokenUsageDetails unreported() {
         return new TokenUsageDetails(null, null, null);

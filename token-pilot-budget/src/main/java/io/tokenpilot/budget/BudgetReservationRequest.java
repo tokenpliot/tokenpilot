@@ -7,11 +7,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 호출 전 안전 상한 비용을 예산 bucket에 예약하기 위한 immutable 요청입니다.
+ * Immutable request for reserving a pre-call safe upper-bound cost in a budget bucket.
  *
- * <p>{@code limit}은 bucket 생성 시 고정되는 정책 snapshot이고,
- * {@code safeUpperBoundCost}는 예약할 실제 금액입니다. 모델과 가격 식별자는
- * 같은 idempotency key의 요청 payload가 바뀌었는지 검증하는 fingerprint로 사용됩니다.</p>
+ * <p>{@code limit} is the policy snapshot fixed when the bucket is created, and
+ * {@code safeUpperBoundCost} is the amount to reserve. Model and pricing
+ * identifiers form part of the fingerprint used to detect a changed request
+ * payload under the same idempotency key.</p>
  */
 public record BudgetReservationRequest(
         BudgetKey key,
@@ -68,8 +69,8 @@ public record BudgetReservationRequest(
     }
 
     /**
-     * @deprecated request ID와 idempotency key를 같은 값으로 사용하는 호환 생성자입니다.
-     *             신규 호출은 두 값을 명시하는 canonical 생성자를 사용하세요.
+     * @deprecated Compatibility constructor that uses the same value for request ID and idempotency key.
+     *             New calls should use the canonical constructor with both values explicit.
      */
     @Deprecated(since = "0.1.0", forRemoval = false)
     public BudgetReservationRequest(
@@ -96,8 +97,8 @@ public record BudgetReservationRequest(
     }
 
     /**
-     * @deprecated request ID와 idempotency key를 같은 값으로 사용하는 호환 생성자입니다.
-     *             신규 호출은 두 값을 명시하는 canonical 생성자를 사용하세요.
+     * @deprecated Compatibility constructor that uses the same value for request ID and idempotency key.
+     *             New calls should use the canonical constructor with both values explicit.
      */
     @Deprecated(since = "0.1.0", forRemoval = false)
     public BudgetReservationRequest(
@@ -125,7 +126,7 @@ public record BudgetReservationRequest(
     }
 
     /**
-     * @deprecated request ID와 idempotency key를 같은 값으로 사용하는 호환 생성자입니다.
+     * @deprecated Compatibility constructor that uses the same value for request ID and idempotency key.
      */
     @Deprecated(since = "0.1.0", forRemoval = false)
     public BudgetReservationRequest(
@@ -149,7 +150,7 @@ public record BudgetReservationRequest(
     }
 
     /**
-     * @deprecated request ID와 idempotency key를 같은 값으로 사용하는 호환 생성자입니다.
+     * @deprecated Compatibility constructor that uses the same value for request ID and idempotency key.
      */
     @Deprecated(since = "0.1.0", forRemoval = false)
     public BudgetReservationRequest(

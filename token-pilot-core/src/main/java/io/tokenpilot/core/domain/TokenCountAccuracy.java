@@ -1,16 +1,16 @@
 package io.tokenpilot.core.domain;
 
 /**
- * counted token 결과의 계산 정확도를 나타냅니다.
+ * Describes the accuracy of a counted token result.
  */
 public enum TokenCountAccuracy {
     /**
-     * 계산값이 정확하며 tokens와 safeUpperBoundTokens가 동일한 상태입니다.
+     * The count is exact, so tokens and safeUpperBoundTokens are equal.
      */
     EXACT,
 
     /**
-     * 계산값이 추정치이며 safeUpperBoundTokens가 tokens 이상인 상태입니다.
+     * The count is estimated, so safeUpperBoundTokens is greater than or equal to tokens.
      */
     HEURISTIC
 }

@@ -8,10 +8,10 @@ import java.util.Currency;
 import java.util.Objects;
 
 /**
- * Token Pilot 설정을 optional budget 정책으로 변환하는 공개 진입점입니다.
+ * Public entry point for converting Token Pilot settings into an optional budget policy.
  *
- * <p>budget 타입을 {@link TokenPilotProperties}에서 분리해 budget 모듈이 없는
- * core-only 자동 설정도 class loading에 실패하지 않도록 합니다.</p>
+ * <p>Budget types are kept separate from {@link TokenPilotProperties} so
+ * core-only auto-configuration can load when the budget module is absent.</p>
  */
 public final class TokenPilotBudgetPolicyFactory {
 

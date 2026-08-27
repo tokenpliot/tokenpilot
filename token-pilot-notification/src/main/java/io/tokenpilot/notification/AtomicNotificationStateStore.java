@@ -6,7 +6,7 @@ import io.tokenpilot.budget.BudgetSnapshot;
 import io.tokenpilot.budget.ReservationAccountingEvent;
 import io.tokenpilot.budget.ReservationReconciliationRequiredEvent;
 
-/** atomic budget/accounting 결과의 threshold를 원자적으로 claim하는 저장소 계약입니다. */
+/** Store contract for atomically claiming thresholds from atomic budget/accounting results. */
 public interface AtomicNotificationStateStore extends NotificationStateStore {
 
   NotificationClaim recordAppliedTransition(

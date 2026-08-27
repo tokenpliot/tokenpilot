@@ -1,10 +1,10 @@
 package io.tokenpilot.core.domain;
 
 /**
- * token 계산에 사용된 estimator 구현과 버전을 식별합니다.
+ * Identifies the estimator implementation and version used for token counting.
  *
- * @param estimatorId 안정적인 estimator 구현 식별자
- * @param estimatorVersion 계산식이나 asset 변경을 구분하는 버전
+ * @param estimatorId stable estimator implementation identifier
+ * @param estimatorVersion version distinguishing formula or asset changes
  */
 public record TokenEstimatorDescriptor(
         String estimatorId,
@@ -12,9 +12,9 @@ public record TokenEstimatorDescriptor(
 ) {
 
     /**
-     * estimator 식별자와 버전이 null 또는 blank가 아닌지 검증합니다.
+     * Validates that the estimator identifier and version are not null or blank.
      *
-     * @throws IllegalArgumentException estimatorId 또는 estimatorVersion이 null이거나 blank인 경우
+     * @throws IllegalArgumentException when estimatorId or estimatorVersion is null or blank
      */
     public TokenEstimatorDescriptor {
         estimatorId = requireText(estimatorId, "estimatorId");

@@ -16,10 +16,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 기본 {@link UsageExtractor} 구현체.
- * Spring AI의 {@link Usage} 정보를 {@link TokenUsage}로 변환하며,
- * provider native usage와 메타데이터에서 cache/reasoning breakdown을 식별합니다.
- * Provider가 비포괄 총량을 반환하면 Token Pilot의 포괄 총량 계약에 맞게 정규화합니다.
+ * Default {@link UsageExtractor} implementation.
+ * Converts Spring AI {@link Usage} information to {@link TokenUsage} and
+ * identifies cache/reasoning breakdowns in provider-native usage and metadata.
+ * When a provider returns non-inclusive totals, normalizes them to Token Pilot's
+ * inclusive-total contract.
  */
 public class DefaultUsageExtractor implements UsageExtractor {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};

@@ -9,7 +9,7 @@ import io.tokenpilot.core.domain.PricingMissingEvent;
 
 import java.util.Objects;
 
-/** Token Pilot core의 preflight와 pricing-miss 이벤트를 Micrometer meter로 투영합니다. */
+/** Projects Token Pilot core preflight and pricing-miss events into Micrometer meters. */
 public final class CoreMetricsPublisher
         implements PreflightDecisionListener, PricingMissingListener {
 

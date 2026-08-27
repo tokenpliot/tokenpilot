@@ -132,7 +132,45 @@ curl -s http://localhost:8080/test/token-pilot/demo/reconciliation-failure | jq
 The complete sample procedure is in
 [`token-pilot-sample-app/DEMO_RUNBOOK.md`](../token-pilot-sample-app/DEMO_RUNBOOK.md).
 
-## 3. Prometheus and Grafana
+## 3. OpenAI provider smoke
+
+The sample app also includes an opt-in path that uses the real OpenAI provider.
+Stop the `demo` profile first, then set the key in the environment. The call
+can incur provider charges, so keep the prompt short and never commit the key.
+
+```bash
+export OPENAI_API_KEY='your OpenAI API key'
+export OPENAI_MODEL='gpt-4o-mini-2024-07-18'
+
+./gradlew --no-daemon :token-pilot-sample-app:bootRun \
+  --args='--spring.profiles.active=openai-smoke'
+```
+
+In another terminal:
+
+```bash
+curl -sS --get http://localhost:8080/test/token-pilot/openai-smoke \
+  --data-urlencode 'prompt=Reply with one short sentence confirming the provider is reachable.' \
+  | jq
+```
+
+The expected evidence is `status=PASS`, a reported usage source, and
+`accountingState=COMMITTED`. The default model is the versioned model already
+known by the sample catalog. If `OPENAI_MODEL` is changed, its catalog entry
+and pricing plan must also match the response model.
+
+The live test is guarded and skipped by the normal test suite:
+
+```bash
+RUN_OPENAI_SMOKE=true \
+  ./gradlew --no-daemon :token-pilot-sample-app:test \
+  --tests io.tokenpilot.sample.OpenAiSmokeE2ETest
+```
+
+Run the demo first, stop it, then start `openai-smoke`; both profiles use port
+`8080` and must not run concurrently.
+
+## 4. Prometheus and Grafana
 
 Keep the sample app running and start the monitoring services:
 

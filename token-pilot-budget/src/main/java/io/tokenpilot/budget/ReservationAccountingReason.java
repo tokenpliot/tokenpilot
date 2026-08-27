@@ -1,6 +1,6 @@
 package io.tokenpilot.budget;
 
-/** 회계 명령과 정산 결과에 사용하는 제한된 사유입니다. */
+/** Bounded reasons used by accounting commands and settlement results. */
 public enum ReservationAccountingReason {
     ACTUAL_USAGE_REPORTED,
     LATE_ACTUAL_USAGE_REPORTED,

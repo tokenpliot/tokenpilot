@@ -1,17 +1,17 @@
 package io.tokenpilot.core.domain;
 
 /**
- * 토큰 사용량 값의 출처와 생성 방식을 나타냅니다.
+ * Describes the source and derivation method of token usage values.
  */
 public enum UsageSource {
-    /** provider가 포괄 총량을 직접 보고한 사용량 */
+    /** Usage directly reported by the provider as inclusive totals. */
     PROVIDER_REPORTED,
-    /** provider가 보고한 여러 필드를 어댑터가 정규화해 만든 사용량 */
+    /** Usage normalized by an adapter from multiple provider-reported fields. */
     PROVIDER_DERIVED,
-    /** 로컬 tokenizer가 계산한 사용량 */
+    /** Usage counted by a local tokenizer. */
     LOCAL_TOKENIZER,
-    /** 휴리스틱으로 근사 추정한 사용량 */
+    /** Usage approximately estimated by a heuristic. */
     HEURISTIC_ESTIMATE,
-    /** 사용량 정보를 얻을 수 없음 */
+    /** Usage information was unavailable. */
     UNAVAILABLE
 }

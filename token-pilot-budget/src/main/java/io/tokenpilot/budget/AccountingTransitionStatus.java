@@ -1,35 +1,36 @@
 package io.tokenpilot.budget;
 
 /**
- * 예약 생성 이후 회계 상태 변경 명령의 결과입니다.
+ * Result of an accounting state-change command after reservation creation.
  *
- * <p>{@link #APPLIED}만 새로운 회계 변경이 적용되었음을 뜻합니다. 나머지 결과는 기존 상태와
- * 금액을 바꾸지 않았음을 뜻하므로 호출자는 예외 메시지나 저장소 내부 구현에 의존하지 않고
- * 재시도, 충돌 처리, 입력 보정을 결정할 수 있습니다.</p>
+ * <p>Only {@link #APPLIED} means that a new accounting change was applied. All
+ * other results leave the existing state and amounts unchanged, allowing callers
+ * to decide on retries, conflict handling, or input correction without depending
+ * on exception messages or store internals.</p>
  */
 public enum AccountingTransitionStatus {
-    /** 요청한 회계 변경이 새로 적용되었습니다. */
+    /** The requested accounting change was newly applied. */
     APPLIED,
 
-    /** 같은 회계 명령과 값이 이미 적용되어 기존 결과가 재사용되었습니다. */
+    /** The same accounting command and values were already applied, so the existing result was reused. */
     REUSED,
 
-    /** 기존에 적용된 종료 명령 또는 값이 새 요청과 충돌합니다. */
+    /** An already applied terminal command or value conflicts with the new request. */
     CONFLICT,
 
-    /** 대상 예약을 찾을 수 없습니다. */
+    /** The target reservation was not found. */
     NOT_FOUND,
 
-    /** 명령 금액의 통화가 예약 통화와 다릅니다. */
+    /** The command amount uses a different currency from the reservation. */
     CURRENCY_MISMATCH,
 
-    /** 명령 인자가 계약을 만족하지 않습니다. */
+    /** The command arguments do not satisfy the contract. */
     INVALID_ARGUMENT,
 
-    /** 현재 예약 상태에서는 요청한 전이가 허용되지 않습니다. */
+    /** The requested transition is not allowed from the current reservation state. */
     NOT_ALLOWED;
 
-    /** 새로운 회계 변경이 적용되었는지 반환합니다. */
+    /** Returns whether a new accounting change was applied. */
     public boolean isApplied() {
         return this == APPLIED;
     }

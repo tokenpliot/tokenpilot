@@ -5,10 +5,11 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * context admission 결과와 판정에 사용한 immutable metadata입니다.
+ * Context admission result and immutable metadata used for the decision.
  *
- * <p>{@code remainingTokens}는 FITS 결과에서만 제공됩니다. INDETERMINATE와
- * EXCEEDS에서 이를 빈 값으로 유지해 가짜 여유량을 provider 경계에 전달하지 않습니다.</p>
+ * <p>{@code remainingTokens} is provided only for FITS results. It remains empty
+ * for INDETERMINATE and EXCEEDS so a false remaining capacity is not passed to
+ * the provider boundary.</p>
  */
 public record BudgetResult(
         AdmissionStatus status,
@@ -87,9 +88,9 @@ public record BudgetResult(
     }
 
     /**
-     * FITS 상태인지 반환합니다.
+     * Returns whether the result has FITS status.
      *
-     * @return status가 FITS이면 true
+     * @return {@code true} when status is FITS
      */
     public boolean fits() {
         return status == AdmissionStatus.FITS;

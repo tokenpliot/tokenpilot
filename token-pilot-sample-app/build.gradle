@@ -13,11 +13,12 @@ repositories {
 
 dependencies {
     implementation project(':token-pilot-starter')
+    implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
-    // 웹 서버 구동을 위한 필수품
+    // Required for running the web server.
     implementation 'org.springframework.boot:spring-boot-starter-web'
 
-    // 모니터링 (프로메테우스가 데이터를 긁어갈 수 있게 해줌)
+    // Monitoring support (allows Prometheus to scrape data).
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
@@ -26,12 +27,12 @@ dependencies {
     testImplementation 'org.springframework.ai:spring-ai-client-chat'
 }
 
-// 스프링 부트 실행 파일(밀키트) 포장을 강제로 켭니다!
+// Force packaging of the Spring Boot executable.
 bootJar {
     enabled = true
 }
 
-// 일반 부품용 jar 포장은 필요 없으니 끕니다.
+// Disable the regular library JAR because the executable is the intended artifact.
 jar {
     enabled = false
 }

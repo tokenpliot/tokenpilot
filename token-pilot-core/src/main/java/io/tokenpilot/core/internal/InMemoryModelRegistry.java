@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * canonical id와 exact alias를 하나의 lookup index로 관리하는 in-memory registry입니다.
+ * In-memory registry that manages canonical IDs and exact aliases in one lookup index.
  */
 final class InMemoryModelRegistry implements ModelRegistry {
 

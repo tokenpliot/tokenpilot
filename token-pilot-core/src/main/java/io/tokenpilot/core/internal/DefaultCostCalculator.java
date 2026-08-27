@@ -11,10 +11,10 @@ import io.tokenpilot.core.exception.MissingPricingException;
 import java.math.BigDecimal;
 
 /**
- * 기본 비용 계산기 구현체.
- * 포괄 총량에서 cache/reasoning 세부량을 분리한 배타적 구간별로
- * {@link TokenType} 단가를 적용하여 중복 없이 계산합니다.
- * 1K 토큰당 가격을 정확한 decimal shift로 계산하며 내부에서 반올림하지 않습니다.
+ * Default cost calculator implementation.
+ * Separates cache/reasoning details from inclusive totals into disjoint segments
+ * and applies the {@link TokenType} rates without double counting.
+ * Calculates per-1K-token prices with an exact decimal shift and does not round internally.
  */
 class DefaultCostCalculator implements CostCalculator {
     @Override

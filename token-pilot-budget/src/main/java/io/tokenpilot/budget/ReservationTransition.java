@@ -3,7 +3,7 @@ package io.tokenpilot.budget;
 import java.util.Objects;
 
 /**
- * 예약의 상태 전이 판단입니다.
+ * Reservation state transition decision.
  */
 public record ReservationTransition(
         ReservationState previousState,

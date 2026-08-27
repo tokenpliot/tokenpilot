@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 예산 bucket에 생성된 immutable 예약 snapshot입니다.
+ * Immutable reservation snapshot created in a budget bucket.
  */
 public record BudgetReservation(
         ReservationId id,
@@ -74,8 +74,8 @@ public record BudgetReservation(
     }
 
     /**
-     * @deprecated request ID와 idempotency key를 같은 값으로 사용하는 호환 생성자입니다.
-     *             신규 예약은 {@link #reserved(ReservationId, BudgetReservationRequest, Instant)}로 생성하세요.
+     * @deprecated Compatibility constructor that uses the same value for request ID and idempotency key.
+     *             Create new reservations with {@link #reserved(ReservationId, BudgetReservationRequest, Instant)}.
      */
     @Deprecated(since = "0.1.0", forRemoval = false)
     public BudgetReservation(
@@ -131,11 +131,13 @@ public record BudgetReservation(
     }
 
     /**
-     * 같은 idempotency key에 전달된 요청이 기존 예약과 같은 비용 책임을 뜻하는지 비교합니다.
+     * Compares whether a request using the same idempotency key represents the
+     * same billing liability as the existing reservation.
      *
-     * <p>{@link PricingSnapshot#checkedAt()}은 가격 조회 시점의 관측 metadata이므로 비교에서
-     * 제외합니다. 반면 model, pricing policy, catalog version, currency, rate와 token estimate를
-     * 포함해 실제 가격 또는 예약 책임을 바꾸는 값은 모두 일치해야 합니다.</p>
+     * <p>{@link PricingSnapshot#checkedAt()} is observational metadata from the
+     * pricing lookup time and is excluded from comparison. Values that could
+     * change the actual price or reservation liability—including model, pricing
+     * policy, catalog version, currency, rate, and token estimate—must all match.</p>
      */
     public boolean matches(BudgetReservationRequest request) {
         return key.equals(request.key())
@@ -169,7 +171,7 @@ public record BudgetReservation(
         );
     }
 
-    /** 이 예약이 지정한 provider 요청에 속하는지 확인합니다. */
+    /** Returns whether this reservation belongs to the specified provider request. */
     public boolean belongsTo(String candidateRequestId) {
         return requestId.equals(candidateRequestId);
     }

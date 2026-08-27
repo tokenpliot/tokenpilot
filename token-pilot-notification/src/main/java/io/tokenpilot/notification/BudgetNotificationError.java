@@ -3,10 +3,11 @@ package io.tokenpilot.notification;
 import java.util.Objects;
 
 /**
- * 알림 실패 hook에 전달하는 제한된 오류 정보입니다.
+ * Bounded error information passed to the notification failure hook.
  *
- * <p>원본 예외 메시지와 notification event를 보존하지 않아 prompt, provider response,
- * API key가 오류 경로로 전달되지 않습니다. 각 문자열은 최대 128자로 제한됩니다.</p>
+ * <p>The original exception message and notification event are not retained, so
+ * prompts, provider responses, and API keys do not enter the error path. Each
+ * string is limited to 128 characters.</p>
  */
 public record BudgetNotificationError(
     String stage,

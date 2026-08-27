@@ -8,23 +8,24 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * legacy decision 기반 알림 dedup 저장소입니다.
- * Atomic lifecycle 연결은 {@link AtomicNotificationStateStore}를 구현해야 합니다.
+ * Notification deduplication store for legacy decision-based notifications.
+ * Atomic lifecycle integration requires implementing
+ * {@link AtomicNotificationStateStore}.
  */
 public interface NotificationStateStore {
 
-  /** @deprecated legacy decision 기반 조회 API입니다. */
+  /** @deprecated Legacy decision-based read API. */
   @Deprecated(since = "0.1.0", forRemoval = false)
   BudgetThreshold getLastNotifiedThreshold(BudgetKey key);
 
-  /** @deprecated legacy decision 기반 갱신 API입니다. */
+  /** @deprecated Legacy decision-based update API. */
   @Deprecated(since = "0.1.0", forRemoval = false)
   void updateLastNotifiedThreshold(
       BudgetKey key,
       BudgetThreshold threshold
   );
 
-  /** 원자적으로 claim된 threshold와 해당 판단의 사용량입니다. */
+  /** Atomically claimed thresholds and the usage from their decision. */
   record NotificationClaim(
       Cost usage,
       List<BudgetThreshold> thresholds,

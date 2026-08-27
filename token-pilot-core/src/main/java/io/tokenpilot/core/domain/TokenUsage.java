@@ -4,14 +4,14 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * AI 모델 호출 시 발생하는 토큰 사용량 정보.
- * 전체 입력/출력 토큰과 세부 사용량을 관리합니다.
+ * Token usage information produced by an AI model call.
+ * Manages inclusive input/output totals and usage details.
  *
- * @param inputTokens  전체 입력 토큰
- * @param outputTokens 전체 출력 토큰
- * @param details      세부 토큰 사용량
- * @param source       사용량 값의 출처
- * @param metadata     추가 메타데이터 (예: 모델 정보 등)
+ * @param inputTokens  total input tokens
+ * @param outputTokens total output tokens
+ * @param details      detailed token usage
+ * @param source       source of the usage values
+ * @param metadata     additional metadata, such as model information
  */
 public record TokenUsage(
         long inputTokens,
@@ -21,10 +21,11 @@ public record TokenUsage(
         Map<String, Object> metadata
 ) {
     /**
-     * 토큰 총량과 세부량의 포함 관계를 검증하고 metadata를 불변 복사합니다.
+     * Validates containment between token totals and details, then makes an
+     * immutable copy of metadata.
      *
-     * @throws IllegalArgumentException 토큰 수가 음수이거나 세부량이 총량을 초과한 경우
-     * @throws NullPointerException details/source가 null이거나 metadata에 null key/value가 있는 경우
+     * @throws IllegalArgumentException when token counts are negative or details exceed their totals
+     * @throws NullPointerException when details/source is null or metadata contains a null key/value
      */
     public TokenUsage {
         if (inputTokens < 0) {
@@ -68,11 +69,11 @@ public record TokenUsage(
     }
 
     /**
-     * 기본 입력/출력 토큰을 사용하는 {@link TokenUsage}를 생성합니다.
+     * Creates {@link TokenUsage} with basic input and output token totals.
      *
-     * @param prompt 전체 입력 토큰
-     * @param completion 전체 출력 토큰
-     * @return 세부량과 metadata가 비어 있는 사용량
+     * @param prompt total input tokens
+     * @param completion total output tokens
+     * @return usage with no details or metadata
      */
     public static TokenUsage from(long prompt, long completion) {
         return new TokenUsage(
@@ -85,12 +86,12 @@ public record TokenUsage(
     }
 
     /**
-     * 입력/출력/추론 토큰을 포함하는 {@link TokenUsage}를 생성합니다.
+     * Creates {@link TokenUsage} with input, output, and reasoning tokens.
      *
-     * @param prompt 전체 입력 토큰
-     * @param completion 전체 출력 토큰
-     * @param reasoning 전체 출력에 포함된 reasoning 토큰
-     * @return reasoning 세부량을 포함하는 사용량
+     * @param prompt total input tokens
+     * @param completion total output tokens
+     * @param reasoning reasoning tokens included in total output
+     * @return usage containing reasoning details
      */
     public static TokenUsage from(long prompt, long completion, long reasoning) {
         return new TokenUsage(
@@ -103,10 +104,10 @@ public record TokenUsage(
     }
 
     /**
-     * provider 응답에서 사용량 정보를 얻지 못한 상태를 생성합니다.
+     * Creates a state in which usage information was unavailable in the provider response.
      *
-     * @param metadata 보존할 응답 메타데이터
-     * @return 출처가 {@link UsageSource#UNAVAILABLE}인 0 토큰 사용량
+     * @param metadata response metadata to preserve
+     * @return zero-token usage with source {@link UsageSource#UNAVAILABLE}
      */
     public static TokenUsage unavailable(Map<String, Object> metadata) {
         return new TokenUsage(
@@ -119,40 +120,41 @@ public record TokenUsage(
     }
 
     /**
-     * 모든 종류의 입력/출력 토큰 수의 합계를 반환합니다.
+     * Returns the total number of input tokens across all input categories.
      *
-     * @return 전체 입력 토큰
+     * @return total input tokens
      */
     public long promptTokens() {
         return inputTokens;
     }
 
     /**
-     * 모든 종류의 출력(추론 포함) 토큰 수의 합계를 반환합니다.
+     * Returns the total number of output tokens, including reasoning tokens.
      *
-     * @return 전체 출력 토큰
+     * @return total output tokens
      */
     public long completionTokens() {
         return outputTokens;
     }
 
     /**
-     * 전체 사용 토큰 수의 합계를 반환합니다.
+     * Returns the total number of used tokens.
      *
-     * @return 전체 입력과 출력 토큰의 합
-     * @throws ArithmeticException 합계가 {@code long} 범위를 초과한 경우
+     * @return the sum of total input and output tokens
+     * @throws ArithmeticException when the sum exceeds the {@code long} range
      */
     public long totalTokens() {
         return Math.addExact(inputTokens, outputTokens);
     }
 
     /**
-     * 특정 토큰 타입의 전체 또는 세부 사용량을 반환합니다.
-     * 보고되지 않은 세부량은 이 호환 projection에서 {@code 0}으로 반환되며,
-     * 미보고 여부는 {@link #details()}의 nullable 필드로 확인해야 합니다.
+     * Returns the total or detailed usage for a token type.
+     * Unreported details are returned as {@code 0} in this compatibility
+     * projection; use the nullable fields in {@link #details()} to distinguish
+     * unreported values.
      *
-     * @param type 조회할 토큰 타입
-     * @return 해당 토큰 타입의 사용량
+     * @param type token type to retrieve
+     * @return usage for the requested token type
      */
     public long getCount(TokenType type) {
         return switch (type) {

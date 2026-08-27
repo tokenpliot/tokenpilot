@@ -44,10 +44,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /**
- * resolved {@link BudgetKey}별 확정 비용과 원자적 예약을 관리하는 인메모리 저장소입니다.
+ * In-memory store managing committed cost and atomic reservations for each
+ * resolved {@link BudgetKey}.
  *
- * <p>bucket별 monitor가 조회·통화 검증·한도 검증·예약 갱신을 함께 보호하고,
- * 별도의 idempotency index가 같은 요청의 중복 예약을 차단합니다.</p>
+ * <p>A per-bucket monitor protects reads, currency validation, limit validation,
+ * and reservation updates together. A separate idempotency index prevents
+ * duplicate reservations for the same request.</p>
  */
 public class InMemoryBudgetStateStore implements AtomicBudgetStateStore {
 
@@ -734,7 +736,7 @@ public class InMemoryBudgetStateStore implements AtomicBudgetStateStore {
             try {
                 errorHandler.onFailure(event);
             } catch (RuntimeException ignored) {
-                // Error handler도 best-effort이며 회계/admission 결과에 영향을 주지 않습니다.
+                // The error handler is also best-effort and does not affect accounting or admission results.
             }
         }
     }

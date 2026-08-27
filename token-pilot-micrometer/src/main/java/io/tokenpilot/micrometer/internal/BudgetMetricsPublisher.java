@@ -20,7 +20,7 @@ import io.tokenpilot.budget.ReservationState;
 import java.math.BigInteger;
 import java.util.Objects;
 
-/** Atomic budget/accounting 결과를 Token Pilot 고유 Micrometer meter로 투영합니다. */
+/** Projects atomic budget/accounting results into Token Pilot-owned Micrometer meters. */
 public final class BudgetMetricsPublisher
         implements ReservationAccountingListener, ReservationAccountingListenerErrorHandler {
 

@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * provider 호출 전에 확정된 요청 단위 pricing snapshot.
+ * Request-scoped pricing snapshot resolved before provider invocation.
  */
 public record PricingSnapshot(
         String modelId,
@@ -57,17 +57,17 @@ public record PricingSnapshot(
     }
 
     /**
-     * 가격 조회 시각을 제외하고 실제 비용 책임을 결정하는 terms가 같은지 반환합니다.
-     * {@link #checkedAt()}은 같은 요청의 재시도에서 달라질 수 있는 관측 metadata이므로
-     * 멱등성 fingerprint에는 포함하지 않습니다.
+     * Returns whether the billing terms are equal, excluding the pricing lookup time.
+     * {@link #checkedAt()} is observational metadata that may differ on retries of
+     * the same request, so it is excluded from the idempotency fingerprint.
      */
     public boolean hasSameBillingTerms(PricingSnapshot other) {
         return haveSameBillingTerms(this, other);
     }
 
     /**
-     * 두 snapshot의 비용 책임 terms를 비교합니다. 테스트 double처럼 rate map이 없는
-     * 호환 snapshot은 양쪽 모두 없을 때 같은 것으로 취급합니다.
+     * Compares the billing terms of two snapshots. Compatible snapshots without a
+     * rate map, such as test doubles, are considered equal when both maps are absent.
      */
     public static boolean haveSameBillingTerms(
             PricingSnapshot first,
@@ -95,7 +95,7 @@ public record PricingSnapshot(
     }
 
     /**
-     * {@link #hasSameBillingTerms(PricingSnapshot)}와 일치하는 bounded hash code입니다.
+     * Bounded hash code consistent with {@link #hasSameBillingTerms(PricingSnapshot)}.
      */
     public int billingTermsHashCode() {
         int result = Objects.hash(modelId, pricingPolicyId, catalogVersion, currency);

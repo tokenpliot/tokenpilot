@@ -16,7 +16,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 
-/** Optional notification module의 bean graph를 격리하는 자동 설정입니다. */
+/** Auto-configuration isolating the optional notification module bean graph. */
 @AutoConfiguration(after = {
         TokenPilotAutoConfiguration.class,
         TokenPilotNotificationMetricsAutoConfiguration.class

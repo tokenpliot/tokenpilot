@@ -13,7 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
-/** Core control events와 legacy ledger metrics의 조건부 자동 설정입니다. */
+/** Conditional auto-configuration for core control events and legacy ledger metrics. */
 @AutoConfiguration(after = TokenPilotAutoConfiguration.class, afterName = {
         "org.springframework.boot.micrometer.metrics.autoconfigure.MetricsAutoConfiguration",
         "org.springframework.boot.micrometer.metrics.autoconfigure.CompositeMeterRegistryAutoConfiguration"

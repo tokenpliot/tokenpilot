@@ -5,8 +5,8 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * LLM 호출 전에 수행한 token 계산의 immutable snapshot입니다.
- * 계산된 결과와 계산할 수 없는 결과를 상호 배타적으로 표현합니다.
+ * Immutable snapshot of a token count performed before an LLM call.
+ * Represents counted and unavailable results as mutually exclusive states.
  */
 public final class TokenCountResult {
     private final ResultState state;
@@ -27,17 +27,17 @@ public final class TokenCountResult {
     }
 
     /**
-     * token 계산값이 존재하는 counted 결과를 생성합니다.
+     * Creates a counted result containing a token count.
      *
-     * @param tokens               정보 제공용 token 계산값
-     * @param safeUpperBoundTokens 보수적 admission 판단에 사용할 안전 상한
-     * @param accuracy             계산 정확도
-     * @param scope                계산에 포함된 입력 범위
-     * @param estimatorDescriptor  계산에 사용된 estimator 식별 정보
-     * @param tokenizationBasis    모델 encoding과 비교할 tokenization 기준
-     * @return 검증된 counted 결과
-     * @throws IllegalArgumentException token 값이나 accuracy별 상한 관계가 유효하지 않은 경우
-     * @throws NullPointerException     accuracy, scope, estimatorDescriptor 또는 tokenizationBasis가 null인 경우
+     * @param tokens               informational token count
+     * @param safeUpperBoundTokens safe upper bound for conservative admission decisions
+     * @param accuracy             counting accuracy
+     * @param scope                input scope included in the count
+     * @param estimatorDescriptor estimator identity used for counting
+     * @param tokenizationBasis   tokenization basis compared with the model encoding
+     * @return a validated counted result
+     * @throws IllegalArgumentException when token values or the accuracy-specific bound relationship is invalid
+     * @throws NullPointerException when accuracy, scope, estimatorDescriptor, or tokenizationBasis is null
      */
     public static TokenCountResult counted(
             long tokens,
@@ -96,14 +96,14 @@ public final class TokenCountResult {
     }
 
     /**
-     * token 계산 불가 결과를 생성합니다.
+     * Creates an unavailable token count result.
      *
-     * @param reason              계산 결과를 제공하지 못한 제한된 사유
-     * @param scope               계산하려고 한 입력 범위
-     * @param estimatorDescriptor 계산을 시도한 estimator 식별 정보
-     * @param tokenizationBasis   estimator가 선언한 tokenization 기준
-     * @return unavailable 결과
-     * @throws NullPointerException 인자가 null인 경우
+     * @param reason              bounded reason the count could not be provided
+     * @param scope               input scope that was requested
+     * @param estimatorDescriptor estimator identity used for the attempt
+     * @param tokenizationBasis   tokenization basis declared by the estimator
+     * @return an unavailable result
+     * @throws NullPointerException when an argument is null
      */
     public static TokenCountResult unavailable(
             TokenCountUnavailableReason reason,
@@ -125,18 +125,18 @@ public final class TokenCountResult {
     }
 
     /**
-     * token 계산값이 존재하는 counted 상태인지 확인합니다.
+     * Returns whether this result is a counted state containing a token value.
      *
-     * @return counted 상태이면 true
+     * @return {@code true} when this is a counted state
      */
     public boolean isCounted() {
         return state instanceof Counted;
     }
 
     /**
-     * counted 결과가 정확한 계산값인지 확인합니다.
+     * Returns whether the counted result is exact.
      *
-     * @return accuracy가 EXACT이면 true, HEURISTIC 또는 unavailable이면 false
+     * @return {@code true} when accuracy is EXACT; {@code false} for HEURISTIC or unavailable
      */
     public boolean isExact() {
         if (state instanceof Counted counted) {
@@ -146,18 +146,18 @@ public final class TokenCountResult {
     }
 
     /**
-     * token 계산값을 제공하지 못한 unavailable 상태인지 확인합니다.
+     * Returns whether the token count is unavailable.
      *
-     * @return unavailable 상태이면 true
+     * @return {@code true} when this is an unavailable state
      */
     public boolean isUnavailable() {
         return state instanceof Unavailable;
     }
 
     /**
-     * 정보 제공용 token 계산값을 반환합니다.
+     * Returns the informational token count.
      *
-     * @return counted 상태의 계산값, unavailable 상태이면 empty
+     * @return the counted value, or empty for an unavailable state
      */
     public OptionalLong tokens() {
         if (state instanceof Counted counted) {
@@ -167,9 +167,9 @@ public final class TokenCountResult {
     }
 
     /**
-     * 보수적 admission 판단에 사용할 안전 상한을 반환합니다.
+     * Returns the safe upper bound used for conservative admission decisions.
      *
-     * @return counted 상태의 안전 상한, unavailable 상태이면 empty
+     * @return the counted safe upper bound, or empty for an unavailable state
      */
     public OptionalLong safeUpperBoundTokens() {
         if (state instanceof Counted counted) {
@@ -179,9 +179,9 @@ public final class TokenCountResult {
     }
 
     /**
-     * counted 결과의 계산 정확도를 반환합니다.
+     * Returns the counting accuracy of a counted result.
      *
-     * @return counted 상태의 정확도, unavailable 상태이면 empty
+     * @return the counted accuracy, or empty for an unavailable state
      */
     public Optional<TokenCountAccuracy> accuracy() {
         if (state instanceof Counted counted) {
@@ -191,9 +191,9 @@ public final class TokenCountResult {
     }
 
     /**
-     * token 계산 결과를 제공하지 못한 사유를 반환합니다.
+     * Returns the reason the token count could not be provided.
      *
-     * @return unavailable 상태의 사유, counted 상태이면 empty
+     * @return the unavailable reason, or empty for a counted state
      */
     public Optional<TokenCountUnavailableReason> unavailableReason() {
         if (state instanceof Unavailable(TokenCountUnavailableReason reason)) {
@@ -203,27 +203,27 @@ public final class TokenCountResult {
     }
 
     /**
-     * token 계산에 포함된 입력 범위를 반환합니다.
+     * Returns the input scope included in the token count.
      *
-     * @return 생성 시점의 계산 범위
+     * @return the scope at creation time
      */
     public TokenCountScope scope() {
         return scope;
     }
 
     /**
-     * token 계산에 사용된 estimator 식별 정보를 반환합니다.
+     * Returns the estimator identity used for token counting.
      *
-     * @return 생성 시점의 estimator 식별 정보
+     * @return the estimator identity at creation time
      */
     public TokenEstimatorDescriptor estimatorDescriptor() {
         return estimatorDescriptor;
     }
 
     /**
-     * 모델 encoding과 비교할 tokenization 기준을 반환합니다.
+     * Returns the tokenization basis to compare with the model encoding.
      *
-     * @return 생성 시점의 tokenization 기준
+     * @return the tokenization basis at creation time
      */
     public TokenizationBasis tokenizationBasis() {
         return tokenizationBasis;

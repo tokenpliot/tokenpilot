@@ -6,16 +6,16 @@ import io.tokenpilot.core.domain.PricingSnapshot;
 import java.util.Objects;
 
 /**
- * 예약의 회계 상태와 금액을 변경하는 단일 진입점입니다.
+ * Single entry point for changing a reservation's accounting state and amounts.
  *
  * <table>
- *   <caption>예약 회계 명령의 허용 전이와 금액 이동</caption>
+ *   <caption>Allowed reservation accounting transitions and amount movements</caption>
  *   <thead>
  *     <tr>
- *       <th>명령</th>
- *       <th>허용 상태</th>
- *       <th>결과 상태</th>
- *       <th>금액 이동</th>
+ *       <th>Command</th>
+ *       <th>Allowed state</th>
+ *       <th>Resulting state</th>
+ *       <th>Amount movement</th>
  *     </tr>
  *   </thead>
  *   <tbody>
@@ -23,7 +23,7 @@ import java.util.Objects;
  *       <td>{@link #markInFlight(ReservationId)}</td>
  *       <td>{@link ReservationState#RESERVED}</td>
  *       <td>{@link ReservationState#IN_FLIGHT}</td>
- *       <td>없음</td>
+ *       <td>None</td>
  *     </tr>
  *     <tr>
  *       <td>{@code release(CANCELLED_BEFORE_DISPATCH)}</td>
@@ -64,22 +64,26 @@ import java.util.Objects;
  *   </tbody>
  * </table>
  *
- * <p>표의 전이가 새로 적용되면 {@link AccountingTransitionStatus#APPLIED}입니다.
- * 동일한 종료 명령과 값 또는 정산 대기 명령의 재호출은 상태와 금액을 유지하고
- * {@link AccountingTransitionStatus#REUSED}, 다른 actual 또는 상충하는 종료 명령은
- * {@link AccountingTransitionStatus#CONFLICT}입니다. 아직 종료 명령이 적용되지 않았지만
- * 현재 상태가 표의 허용 상태가 아니면 {@link AccountingTransitionStatus#NOT_ALLOWED}입니다.</p>
+ * <p>A transition newly applied from the table returns
+ * {@link AccountingTransitionStatus#APPLIED}. Repeating the same terminal
+ * command and values, or a reconciliation-pending command, preserves state and
+ * amounts and returns {@link AccountingTransitionStatus#REUSED}. Different
+ * actual usage or a conflicting terminal command returns
+ * {@link AccountingTransitionStatus#CONFLICT}. If no terminal command has been
+ * applied but the current state is not allowed by the table,
+ * {@link AccountingTransitionStatus#NOT_ALLOWED} is returned.</p>
  *
- * <p>존재하지 않는 예약과 명령에 허용되지 않은 reason은 상태를 변경하기 전에
- * {@link IllegalArgumentException}으로 거부합니다. 모든 상태와 금액 변경은 같은 budget
- * bucket의 임계 구역 안에서 함께 적용됩니다.</p>
+ * <p>Missing reservations and reasons not allowed for a command are rejected
+ * with {@link IllegalArgumentException} before state changes. Every state and
+ * amount change is applied together inside the critical section for the same
+ * budget bucket.</p>
  */
 public interface ReservationAccounting {
 
-    /** 예약을 사용한 provider 호출 시작을 기록합니다. */
+    /** Records the start of provider invocation using the reservation. */
     ReservationTransition markInFlight(ReservationId reservationId);
 
-    /** provider 호출 전에 사용하지 않은 예약을 해제합니다. */
+    /** Releases an unused reservation before provider invocation. */
     default ReservationTransition releaseBeforeDispatch(ReservationId reservationId) {
         return release(
                 reservationId,
@@ -87,7 +91,7 @@ public interface ReservationAccounting {
         );
     }
 
-    /** provider가 미과금을 확인한 진행 중 예약을 해제합니다. */
+    /** Releases an in-flight reservation after the provider confirms no charge. */
     default ReservationTransition releaseConfirmedUnbilled(ReservationId reservationId) {
         return release(
                 reservationId,
@@ -101,22 +105,23 @@ public interface ReservationAccounting {
     );
 
     /**
-     * pricing snapshot과 token estimate가 없던 호환 예약을 caller가 계산한 actual 비용으로 확정합니다.
+     * Commits a compatible reservation without a pricing snapshot or token
+     * estimate using actual cost calculated by the caller.
      *
-     * <p>이 호환 경로는 token/model correlation을 포함한
-     * {@link #commit(ActualUsageCommand)} 결과와 회계 이벤트를 만들 수 없으므로,
-     * 신규 예약에는 usage 기반 API를 사용해야 합니다.</p>
+     * <p>This compatibility path cannot create the token/model correlation and
+     * accounting event produced by {@link #commit(ActualUsageCommand)}, so new
+     * reservations must use the usage-based API.</p>
      */
     ReservationTransition commitCost(ReservationId reservationId, Cost actualCost);
 
     /**
-     * provider actual usage를 예약 시점 가격으로 계산하여 확정합니다.
-     * 응답 모델이 예약 pricing snapshot과 다르면 다른 모델 가격을 request 가격으로
-     * 확정하지 않도록 거부합니다.
+     * Calculates provider actual usage at the reservation-time price and commits it.
+     * Rejects a different response model so a different model's price is not
+     * committed under the request price.
      */
     ReservationReconciliation commit(ActualUsageCommand command);
 
-    /** actual을 확보하지 못한 예약을 정산 대기로 전환합니다. */
+    /** Moves a reservation without actual usage into reconciliation pending. */
     default ReservationTransition markReconciliationRequired(
             ReservationId reservationId
     ) {
@@ -132,8 +137,9 @@ public interface ReservationAccounting {
     );
 
     /**
-     * response model과 actual usage를 보존하면서 pricing reconciliation 대기로 이동합니다.
-     * 기존 구현은 command metadata를 보존하지 않는 호환 동작으로 위임할 수 있습니다.
+     * Moves a reservation into pricing reconciliation pending while preserving
+     * the response model and actual usage. Existing implementations may delegate
+     * to compatibility behavior that does not retain command metadata.
      */
     default ReservationTransition markReconciliationRequired(
             ActualUsageCommand command,
@@ -144,14 +150,17 @@ public interface ReservationAccounting {
     }
 
     /**
-     * 늦게 도착한 provider actual usage를 예약 시점 가격으로 계산하여 확정합니다.
-     * 응답 모델은 예약 pricing snapshot의 모델과 같아야 합니다.
+     * Calculates and commits late-arriving provider actual usage at the
+     * reservation-time price. The response model must match the model in the
+     * reservation pricing snapshot.
      */
     ReservationReconciliation reconcileLateActual(ActualUsageCommand command);
 
     /**
-     * pending actual에 response model의 명시적 immutable pricing snapshot을 적용합니다.
-     * 기본 구현은 기존 예약 snapshot만 지원하는 구현과의 호환을 위해 fail-closed합니다.
+     * Applies an explicit immutable pricing snapshot for the response model to
+     * pending actual usage. The default implementation fails closed for
+     * compatibility with implementations that support only the existing
+     * reservation snapshot.
      */
     default ReservationReconciliation reconcileLateActual(
             ActualUsageCommand command,
@@ -168,16 +177,17 @@ public interface ReservationAccounting {
     }
 
     /**
-     * pricing snapshot과 token estimate가 없던 pending 호환 예약을 caller가 계산한 actual 비용으로 확정합니다.
+     * Commits a pending compatible reservation without a pricing snapshot or
+     * token estimate using actual cost calculated by the caller.
      *
-     * <p>신규 예약에는 {@link #reconcileLateActual(ActualUsageCommand)}를 사용해야 합니다.</p>
+     * <p>New reservations must use {@link #reconcileLateActual(ActualUsageCommand)}.</p>
      */
     ReservationTransition reconcileLateActualCost(
             ReservationId reservationId,
             Cost actualCost
     );
 
-    /** 후속 정산할 수 없는 pending 예약을 명시적으로 상각합니다. */
+    /** Explicitly writes off a pending reservation that cannot be reconciled later. */
     default ReservationTransition writeOff(ReservationId reservationId) {
         return writeOff(
                 reservationId,

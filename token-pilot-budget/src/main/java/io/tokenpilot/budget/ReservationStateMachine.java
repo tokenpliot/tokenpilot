@@ -3,14 +3,14 @@ package io.tokenpilot.budget;
 import java.util.Objects;
 
 /**
- * 예약의 회계 상태 전이 가능 여부를 판단합니다.
+ * Determines whether an accounting state transition is allowed for a reservation.
  */
 public final class ReservationStateMachine {
 
     private ReservationStateMachine() {
     }
 
-    /** 예약된 요청의 공급자 호출을 시작합니다. */
+    /** Starts provider invocation for a reserved request. */
     public static ReservationTransition onDispatch(ReservationState currentState) {
         return transitionFrom(
                 currentState,
@@ -19,7 +19,7 @@ public final class ReservationStateMachine {
         );
     }
 
-    /** 공급자 호출 전에 예약을 해제합니다. */
+    /** Releases a reservation before provider invocation. */
     public static ReservationTransition release(ReservationState currentState) {
         return transitionFrom(
                 currentState,
@@ -28,7 +28,7 @@ public final class ReservationStateMachine {
         );
     }
 
-    /** 공급자가 미과금을 확인한 진행 중 예약을 해제합니다. */
+    /** Releases an in-flight reservation after the provider confirms no charge. */
     public static ReservationTransition releaseConfirmedUnbilled(
             ReservationState currentState
     ) {
@@ -39,7 +39,7 @@ public final class ReservationStateMachine {
         );
     }
 
-    /** 전달받은 actual을 확정하기 위한 상태 전이를 판단합니다. */
+    /** Determines the state transition needed to commit the received actual usage. */
     public static ReservationTransition commit(ReservationState currentState) {
         return transitionFrom(
                 currentState,
@@ -48,7 +48,7 @@ public final class ReservationStateMachine {
         );
     }
 
-    /** actual을 전달받지 못한 예약을 정산 대기로 전환할 수 있는지 판단합니다. */
+    /** Determines whether a reservation without actual usage can enter reconciliation pending. */
     public static ReservationTransition markReconciliationRequired(ReservationState currentState) {
         return transitionFrom(
                 currentState,
@@ -57,7 +57,7 @@ public final class ReservationStateMachine {
         );
     }
 
-    /** 정산 대기 중 전달받은 late actual을 확정할 수 있는지 판단합니다. */
+    /** Determines whether late actual usage can be committed while reconciliation is pending. */
     public static ReservationTransition reconcileLateActual(ReservationState currentState) {
         return transitionFrom(
                 currentState,
@@ -66,7 +66,7 @@ public final class ReservationStateMachine {
         );
     }
 
-    /** 정산 대기 중인 예약을 명시적으로 상각합니다. */
+    /** Explicitly writes off a reservation pending reconciliation. */
     public static ReservationTransition writeOff(ReservationState currentState) {
         return transitionFrom(
                 currentState,

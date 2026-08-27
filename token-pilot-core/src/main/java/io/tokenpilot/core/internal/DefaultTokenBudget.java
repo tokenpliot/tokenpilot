@@ -17,7 +17,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
- * versioned model registry를 사용해 overflow-safe context admission을 수행합니다.
+ * Performs overflow-safe context admission using a versioned model registry.
  */
 final class DefaultTokenBudget implements TokenBudget {
 

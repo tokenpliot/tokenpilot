@@ -39,7 +39,7 @@ class MicroCostMetricsPublisherTest {
         // When
         publisher.onRecord(event);
 
-        // Then: 토큰 사용량 카운터 확인
+        // Then: verify the token usage counter
         assertThat(meterRegistry.find("ai.token.usage.total")
                 .tag("model", "gpt-4o")
                 .tag("token_type", "prompt")
@@ -50,13 +50,13 @@ class MicroCostMetricsPublisherTest {
                 .tag("token_type", "completion")
                 .counter().count()).isEqualTo(200.0);
 
-        // Then: 토큰 사용량 분포(Summary) 확인
+        // Then: verify the token usage distribution summary
         assertThat(meterRegistry.find("ai.token.usage.distribution")
                 .tag("model", "gpt-4o")
                 .tag("token_type", "prompt")
                 .summary().max()).isEqualTo(100.0);
 
-        // Then: 비용 카운터 확인
+        // Then: verify the cost counter
         var costCounter = meterRegistry.find("ai.token.cost.total")
                 .tag("model", "gpt-4o")
                 .tag("currency", "USD")

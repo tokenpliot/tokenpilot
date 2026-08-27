@@ -35,11 +35,13 @@ import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * #36 예약 linearization point의 결정적 동시성 회귀 테스트입니다.
+ * Deterministic concurrency regression test for the #36 reservation linearization point.
  *
- * <p>같은 시작선에서 경쟁 명령을 실행하고 공개 snapshot만 검증합니다. 이 테스트는
- * 동시성 정확성의 수학적 증명이나 선형성 검증기를 대체하지 않습니다. #37의
- * commit/release/reconciliation 및 #46의 listener 정책은 해당 계약이 구현된 뒤 확장합니다.</p>
+ * <p>Runs competing commands from the same starting line and verifies only the
+ * public snapshot. This test is not a mathematical proof of concurrency
+ * correctness or a replacement for a linearizability checker. The #37
+ * commit/release/reconciliation and #46 listener policies are extended after
+ * their contracts are implemented.</p>
  */
 class BudgetReservationConcurrencyTest {
 

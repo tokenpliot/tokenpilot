@@ -1,6 +1,6 @@
 package io.tokenpilot.budget;
 
-/** 회계 listener 실패 관측에 사용하는 제한된 listener 종류입니다. */
+/** Bounded listener types used to observe accounting listener failures. */
 public enum ReservationAccountingListenerType {
     METRICS,
     NOTIFICATION,

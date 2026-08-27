@@ -4,7 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Collections;
 
-/** 화면에서 바로 읽을 수 있는 단일 demo 시나리오 결과입니다. */
+/** Single demo scenario result that can be read directly on screen. */
 public record DemoScenarioResult(
         String scenario,
         String status,

@@ -22,11 +22,11 @@ public record MetricsOptions(
     }
 
     /**
-     * 기존 직접 생성 코드의 source/binary 호환성을 유지하는 생성자입니다.
+     * Constructor preserving source and binary compatibility with existing direct construction code.
      *
-     * <p>이 생성자를 직접 사용하는 것은 legacy {@code ai.token.*} meter에 대한 명시적
-     * opt-in으로 취급됩니다. Starter 자동 설정 기본값은 {@link #defaults()}를 사용하여
-     * legacy meter를 비활성화합니다.</p>
+     * <p>Using this constructor directly is treated as an explicit opt-in to
+     * legacy {@code ai.token.*} meters. Starter auto-configuration uses
+     * {@link #defaults()} by default to disable legacy meters.</p>
      */
     public MetricsOptions(Set<String> allowedTagKeys) {
         this(

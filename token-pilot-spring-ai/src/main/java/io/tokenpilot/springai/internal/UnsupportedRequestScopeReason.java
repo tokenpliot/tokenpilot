@@ -1,6 +1,6 @@
 package io.tokenpilot.springai.internal;
 
-/** Token Pilot 0.1.0이 지원하지 않는 Spring AI request scope의 제한된 사유입니다. */
+/** Bounded reasons for Spring AI request scopes unsupported by Token Pilot 0.1.0. */
 enum UnsupportedRequestScopeReason {
     TOOL_MESSAGE,
     MEDIA,

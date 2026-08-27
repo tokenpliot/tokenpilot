@@ -2,7 +2,7 @@ package io.tokenpilot.core;
 
 import io.tokenpilot.core.domain.PreflightDecisionEvent;
 
-/** context admission 판정을 best-effort로 관찰하는 framework-independent 계약입니다. */
+/** Framework-independent contract for best-effort observation of context admission decisions. */
 @FunctionalInterface
 public interface PreflightDecisionListener {
 

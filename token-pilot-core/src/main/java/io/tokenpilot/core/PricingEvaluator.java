@@ -7,24 +7,24 @@ import io.tokenpilot.core.domain.PricingSnapshot;
 import java.util.Optional;
 
 /**
- * Pricing snapshot의 사용 가능 여부와 actual model 정합성을 판단하는 정책 계약.
+ * Policy contract for determining pricing snapshot availability and actual-model consistency.
  */
 public interface PricingEvaluator {
 
     /**
-     * Snapshot에 요청 처리에 필요한 rate가 있는지 검증합니다.
+     * Validates that the snapshot contains rates required to process the request.
      *
-     * @param snapshot 검증할 pricing snapshot, 조회되지 않은 경우 empty
-     * @return snapshot 및 필수 rate의 resolution
+     * @param snapshot pricing snapshot to validate, or empty when it was not resolved
+     * @return resolution of the snapshot and required rates
      */
     PricingResolution validateSnapshotRates(Optional<PricingSnapshot> snapshot);
 
     /**
-     * 호출 전 snapshot을 actual 응답 모델에 적용할 수 있는지 판단합니다.
+     * Determines whether the pre-call snapshot can be applied to the actual response model.
      *
-     * @param snapshot 호출 전에 확정한 pricing snapshot, 확정되지 않은 경우 empty
-     * @param actualModelId provider가 반환한 actual model id
-     * @return pricing reconciliation 판단 결과
+     * @param snapshot pricing snapshot fixed before the call, or empty when it was not fixed
+     * @param actualModelId actual model ID returned by the provider
+     * @return pricing reconciliation result
      */
     PricingReconciliationResult determineReconciliation(
             Optional<PricingSnapshot> snapshot,

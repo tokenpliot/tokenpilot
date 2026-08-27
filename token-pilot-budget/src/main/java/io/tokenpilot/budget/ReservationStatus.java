@@ -1,7 +1,7 @@
 package io.tokenpilot.budget;
 
 /**
- * 예산 예약 시도 결과입니다.
+ * Result of a budget reservation attempt.
  */
 public enum ReservationStatus {
     CREATED,

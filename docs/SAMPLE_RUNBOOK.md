@@ -114,7 +114,59 @@ curl -s http://localhost:8080/test/token-pilot/demo/reconciliation-unknown | jq
 ```
 
 The endpoint list and the effective profile configuration are also maintained
-in [`token-pilot-sample-app/DEMO_RUNBOOK.md`](../token-pilot-sample-app/DEMO_RUNBOOK.md).
+in the [Korean demo runbook](../token-pilot-sample-app/DEMO_RUNBOOK.md) and the
+[English demo runbook](../token-pilot-sample-app/DEMO_RUNBOOK_EN.md).
+
+## OpenAI provider smoke profile
+
+Stop the demo app before starting this profile. The sample app selects the
+OpenAI provider only for `openai-smoke`; the default and `demo` profiles keep
+provider auto-configuration disabled so fake-provider tests remain deterministic.
+
+Set the API key in the environment. Do not put it in a source file or commit it.
+The default model is the versioned catalog entry
+`gpt-4o-mini-2024-07-18`; each request is a real provider call and may incur
+provider charges.
+
+```bash
+export OPENAI_API_KEY='your OpenAI API key'
+export OPENAI_MODEL='gpt-4o-mini-2024-07-18'
+
+./gradlew --no-daemon :token-pilot-sample-app:bootRun \
+  --args='--spring.profiles.active=openai-smoke'
+```
+
+In another terminal, run one short request:
+
+```bash
+curl -sS --get http://localhost:8080/test/token-pilot/openai-smoke \
+  --data-urlencode 'prompt=Reply with one short sentence confirming the provider is reachable.' \
+  | jq
+```
+
+The response is a pass when it reports `status=PASS`, a non-`UNAVAILABLE`
+`usageSource`, and `accountingState=COMMITTED`. It also returns normalized
+input/output/total tokens, the newly applied cost metric delta, and the budget
+snapshot. Inspect the rendered meters with:
+
+```bash
+curl -sS http://localhost:8080/actuator/prometheus \
+  | rg '^tokenpilot_(preflight|budget|cost|reconciliation)'
+```
+
+The opt-in JUnit smoke test uses the same endpoint and is guarded by both
+`RUN_OPENAI_SMOKE=true` and `OPENAI_API_KEY`:
+
+```bash
+RUN_OPENAI_SMOKE=true \
+  ./gradlew --no-daemon :token-pilot-sample-app:test \
+  --tests io.tokenpilot.sample.OpenAiSmokeE2ETest
+```
+
+To run both paths, execute `/test/token-pilot/demo/run` while the `demo` profile
+is active, stop that process, then restart with `openai-smoke` and call the
+smoke endpoint. They intentionally share port `8080` and should not run at the
+same time.
 
 ## Prometheus and Grafana
 

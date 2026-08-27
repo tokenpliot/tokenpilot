@@ -5,10 +5,11 @@ import io.tokenpilot.budget.BudgetThreshold;
 import java.util.Objects;
 
 /**
- * notification handler 처리 또는 dedup 결과를 전달하는 framework-independent 이벤트입니다.
+ * Framework-independent event carrying the result of notification handler
+ * processing or deduplication.
  *
- * @param outcome success, failure 또는 process-local dedup 결과
- * @param threshold 처리 대상인 bounded budget threshold
+ * @param outcome success, failure, or process-local deduplication result
+ * @param threshold bounded budget threshold being processed
  */
 public record BudgetNotificationLifecycleEvent(
     BudgetNotificationOutcome outcome,

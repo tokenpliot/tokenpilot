@@ -1,6 +1,17 @@
 server:
   port: 8080
 
+spring:
+  ai:
+    model:
+      chat: none
+      embedding: none
+      image: none
+      audio:
+        transcription: none
+        speech: none
+      moderation: none
+
 management:
   endpoints:
     web:

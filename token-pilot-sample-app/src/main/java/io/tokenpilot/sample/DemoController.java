@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Map;
 
-/** {@code demo} 프로필에서만 노출되는 검증용 HTTP API입니다. */
+/** Verification HTTP API exposed only in the {@code demo} profile. */
 @RestController
 @Profile("demo")
 public class DemoController {

@@ -1,7 +1,7 @@
 package io.tokenpilot.core.domain;
 
 /**
- * Actual reconciliation 결과.
+ * Actual reconciliation result.
  */
 public enum PricingReconciliationResult {
     RECONCILED,
