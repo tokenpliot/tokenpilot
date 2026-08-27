@@ -20,7 +20,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
-/** Token Pilot의 framework-independent core 자동 설정입니다. */
+/** Auto-configuration for the Token Pilot framework-independent core. */
 @AutoConfiguration
 @ConditionalOnProperty(
         prefix = "token-pilot",

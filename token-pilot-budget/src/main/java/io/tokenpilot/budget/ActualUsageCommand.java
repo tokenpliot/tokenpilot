@@ -6,7 +6,7 @@ import io.tokenpilot.core.domain.UsageSource;
 import java.util.Objects;
 
 /**
- * provider가 보고한 actual usage를 하나의 예약에 정산하기 위한 명령입니다.
+ * Command for settling provider-reported actual usage against one reservation.
  */
 public record ActualUsageCommand(
         String requestId,

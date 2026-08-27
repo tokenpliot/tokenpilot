@@ -9,17 +9,18 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * context admission과 pricing policy 조회에 함께 사용하는 immutable model catalog 정의입니다.
+ * Immutable model catalog definition used for both context admission and
+ * pricing policy lookup.
  *
- * @param canonicalModelId versioned canonical model id
- * @param aliases canonical id로 해석할 exact aliases
- * @param encodingName 모델 encoding asset 이름
- * @param acceptedCompatibilityBasis heuristic/exact estimator가 사용할 수 있는 호환성 기준
- * @param maxContextTokens 모델 context window 크기
- * @param pricingPolicyId canonical pricing policy 식별자
- * @param catalogVersion model catalog 버전
- * @param sourceUri context/encoding metadata의 공식 출처
- * @param sourceAsOf source 확인 시점
+ * @param canonicalModelId versioned canonical model ID
+ * @param aliases exact aliases resolved to the canonical ID
+ * @param encodingName model encoding asset name
+ * @param acceptedCompatibilityBasis compatibility basis accepted by heuristic/exact estimators
+ * @param maxContextTokens model context window size
+ * @param pricingPolicyId canonical pricing policy identifier
+ * @param catalogVersion model catalog version
+ * @param sourceUri authoritative source for context/encoding metadata
+ * @param sourceAsOf time at which the source was checked
  */
 public record ModelDefinition(
         String canonicalModelId,
@@ -59,7 +60,8 @@ public record ModelDefinition(
     }
 
     /**
-     * 기존 모델 정의 생성 코드와의 호환성을 위해 USD를 기본 통화로 사용합니다.
+     * Uses USD as the default currency for compatibility with existing model
+     * definition construction code.
      */
     public ModelDefinition(
             String canonicalModelId,

@@ -3,7 +3,7 @@ package io.tokenpilot.budget;
 import java.util.Objects;
 import java.util.Optional;
 
-/** actual usage를 확보하지 못해 pending liability로 이동한 원자적 회계 결과입니다. */
+/** Atomic accounting result moved to pending liability because actual usage was unavailable. */
 public record ReservationReconciliationRequiredEvent(
         ReservationId reservationId,
         BudgetKey budgetKey,
@@ -57,7 +57,7 @@ public record ReservationReconciliationRequiredEvent(
         }
     }
 
-    /** 기존 actual-unavailable 이벤트를 만드는 호환 생성자입니다. */
+    /** Compatibility constructor for the former actual-unavailable event. */
     public ReservationReconciliationRequiredEvent(
             ReservationId reservationId,
             BudgetKey budgetKey,

@@ -3,7 +3,7 @@ package io.tokenpilot.budget;
 import java.util.UUID;
 
 /**
- * 예산 예약을 식별하는 불변 ID입니다.
+ * Immutable ID identifying a budget reservation.
  */
 public record ReservationId(String value) {
 

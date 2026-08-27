@@ -17,7 +17,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Token Pilot 코어 컴포넌트 생성을 위한 팩토리 클래스입니다.
+ * Factory for creating Token Pilot core components.
  */
 public final class LedgerComponents {
 
@@ -33,29 +33,29 @@ public final class LedgerComponents {
     }
 
     /**
-     * 기본 preflight 비용 상한 계산기를 생성합니다.
+     * Creates the default preflight cost-bound estimator.
      *
-     * <p>계산기는 REQUEST 범위의 token 결과와 하나의 불변 pricing snapshot을
-     * 보관한 문맥을 요구합니다. 이 factory는 context admission이나 atomic reservation을
-     * 대신 수행하지 않습니다.</p>
+     * <p>The estimator requires a context retaining a REQUEST-scope token result
+     * and one immutable pricing snapshot. This factory does not perform context
+     * admission or atomic reservation.</p>
      *
-     * @return 기본 preflight 비용 상한 계산기
+     * @return default preflight cost-bound estimator
      */
     public static PreflightCostEstimator defaultPreflightCostEstimator() {
         return new DefaultPreflightCostEstimator();
     }
 
     /**
-     * UTF-8 byte 길이 기반의 text-only 휴리스틱 token estimator를 생성합니다.
+     * Creates a text-only heuristic token estimator based on UTF-8 byte length.
      *
-     * @return UTF-8 byte 휴리스틱 estimator
+     * @return UTF-8 byte heuristic estimator
      */
     public static TokenEstimator utf8ByteHeuristicTokenEstimator() {
         return new HeuristicTokenEstimator();
     }
 
     /**
-     * model registry를 사용하는 context admission evaluator를 생성합니다.
+     * Creates a context admission evaluator backed by a model registry.
      *
      * @param modelRegistry versioned model catalog
      * @return token context budget evaluator
@@ -65,7 +65,8 @@ public final class LedgerComponents {
     }
 
     /**
-     * model registry와 best-effort decision listener를 사용하는 context admission evaluator를 생성합니다.
+     * Creates a context admission evaluator backed by a model registry and
+     * best-effort decision listeners.
      */
     public static TokenBudget tokenBudget(
             ModelRegistry modelRegistry,
@@ -75,9 +76,9 @@ public final class LedgerComponents {
     }
 
     /**
-     * 등록할 model definition으로 in-memory model registry를 생성합니다.
+     * Creates an in-memory model registry from model definitions to register.
      *
-     * @param definitions immutable model catalog 정의
+     * @param definitions immutable model catalog definitions
      * @return in-memory model registry
      */
     public static ModelRegistry inMemoryModelRegistry(Collection<ModelDefinition> definitions) {
@@ -85,9 +86,10 @@ public final class LedgerComponents {
     }
 
     /**
-     * 공개 문서의 확인 시점과 encoding metadata를 고정한 최소 기본 catalog를 생성합니다.
+     * Creates the minimal default catalog with public-document verification times
+     * and encoding metadata fixed.
      *
-     * @return gpt-4o와 gpt-4o-mini versioned catalog
+     * @return versioned catalog for gpt-4o and gpt-4o-mini
      */
     public static ModelRegistry defaultModelRegistry() {
         return inMemoryModelRegistry(DefaultModelCatalog.definitions());

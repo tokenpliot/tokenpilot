@@ -8,7 +8,7 @@ dependencies {
     api 'org.springframework.ai:spring-ai-model'
     api 'org.springframework.ai:spring-ai-client-chat'
     
-    // Reactor (스트리밍 처리를 위한 Flux 등)
+    // Reactor (for Flux and other streaming types)
     api 'io.projectreactor:reactor-core'
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api'

@@ -7,7 +7,7 @@ import io.tokenpilot.core.domain.PricingSnapshot;
 
 import java.util.Objects;
 
-/** 중복 actual callback을 민감하거나 무제한인 metadata 없이 식별합니다. */
+/** Identifies duplicate actual callbacks without sensitive or unbounded metadata. */
 record ActualUsageFingerprint(
         String requestId,
         String attemptId,

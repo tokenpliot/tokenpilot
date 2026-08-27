@@ -14,7 +14,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.Objects;
 
-/** Spring AI 요청이 Token Pilot 0.1.0에서 지원하는 범위인지 판정합니다. */
+/** Determines whether a Spring AI request is within the scope supported by Token Pilot 0.1.0. */
 final class RequestScopeResolver {
 
     RequestScopeResult resolve(ChatClientRequest request) {

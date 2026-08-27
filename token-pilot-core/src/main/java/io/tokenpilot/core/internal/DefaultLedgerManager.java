@@ -10,8 +10,9 @@ import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 기본 LedgerManager 구현체.
- * 가격 저장소와 계산기를 조율하여 비용을 기록하고, 등록된 리스너들에게 이벤트를 전파합니다.
+ * Default {@link LedgerManager} implementation.
+ * Coordinates the pricing registry and calculator to record costs and publish
+ * events to registered listeners.
  */
 class DefaultLedgerManager implements LedgerManager {
     private static final Currency UNPRICED_COST_CURRENCY = Currency.getInstance("USD");
@@ -33,7 +34,7 @@ class DefaultLedgerManager implements LedgerManager {
     }
 
     /**
-     * 새로운 리스너를 런타임에 등록합니다.
+     * Registers a new listener at runtime.
      */
     public void addListener(LedgerListener listener) {
         if (listener != null) {
@@ -77,7 +78,7 @@ class DefaultLedgerManager implements LedgerManager {
     }
 
     private void publish(String modelId, TokenUsage usage, Cost cost, Map<String, String> tags) {
-        // 이벤트 발행 (리스너들에게 전파)
+        // Publish the event to listeners.
         if (!listeners.isEmpty()) {
             CostRecordedEvent event = new CostRecordedEvent(modelId, usage, cost, tags);
             for (LedgerListener listener : listeners) {

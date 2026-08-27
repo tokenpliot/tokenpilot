@@ -1,6 +1,6 @@
 package io.tokenpilot.budget;
 
-/** 예약 비용의 근거가 된 호출 전 token estimate입니다. */
+/** Pre-call token estimate supporting the reserved cost. */
 public record ReservationTokenEstimate(
         long inputEstimatedTokens,
         long inputSafeUpperBoundTokens,

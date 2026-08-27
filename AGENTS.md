@@ -79,7 +79,7 @@ Token Pilot의 제품 포지션은 framework-independent Java LLM control and ac
 | `token-pilot-notification` | Atomic accounting integration implemented | Commit, reconciliation-required, late reconciliation, and reservation BLOCK results produce process-local atomically deduplicated threshold events with isolated handlers, lifecycle observation, and a sanitized error hook; durable delivery remains |
 | `token-pilot-autoconfigure` | Basic implementation complete | Owner-specific optional bean graphs wire pricing, atomic budget/accounting, Spring AI, notification, and metrics while preserving budget-disabled ledger-only compatibility and `ChatClientBuilderCustomizer` |
 | `token-pilot-starter` | Basic implementation complete | Thin final user entrypoint that brings runtime modules together |
-| `token-pilot-sample-app` | Basic E2E complete | Direct ledger metrics and fake Spring AI lifecycle E2E cover preflight BLOCK, reservation, reconciliation, request-scope rejection, Advisor ordering, listener isolation, and enforcement streaming rejection without an API key |
+| `token-pilot-sample-app` | Basic E2E complete | Direct ledger metrics, deterministic fake-provider demo E2E, and an opt-in OpenAI provider smoke path cover the sample integration; live provider compatibility still requires an explicit API-key run |
 
 ## Current Work Focus
 
@@ -306,6 +306,13 @@ sample app's `DEMO_RUNBOOK.md` documents the Gradle, Prometheus/Grafana, and sce
 verification flow. The provisioned dashboard uses Token Pilot-owned `tokenpilot_*`
 meters and deliberately does not use legacy `ai_token_*` meters.
 
+OpenAI smoke profile endpoints (run with `--spring.profiles.active=openai-smoke`):
+
+- `GET /test/token-pilot/openai-smoke`: performs one real OpenAI Chat Completions call,
+  returns normalized usage and accounting evidence, and requires `OPENAI_API_KEY`.
+- `OpenAiSmokeE2ETest`: is skipped by default and only runs when both
+  `RUN_OPENAI_SMOKE=true` and `OPENAI_API_KEY` are present.
+
 Test-only E2E endpoint:
 
 - `GET /test/token-pilot/chat`: exercises the Spring AI `ChatClient` advisor path with a fake/mock provider or documented real provider setup.
@@ -369,7 +376,7 @@ The active checklist is in `docs/30_DAY_MVP_REPORT.md`; detailed long-term works
 - A response model that differs from the reservation pricing snapshot is not committed at the request model price; it remains pending with `PRICING_RECONCILIATION_REQUIRED` for later settlement.
 - Pricing-mismatch pending events preserve provider actual usage and response model metadata. Consumers may call the explicit `reconcileLateActual(command, responsePricingSnapshot)` API with an immutable response-model pricing snapshot; model, currency, rate, state, and duplicate-callback validation remain fail-closed.
 - The repository, README, JReleaser configuration, and every published module POM use the MIT License. `verifyPublicationMetadata` guards this release contract and ensures the sample app is not published.
-- Sample app E2E uses a fake Spring AI `ChatModel`; real provider API behavior is not yet verified.
+- Sample app's default/demo E2E uses a fake Spring AI `ChatModel`; the OpenAI smoke path is opt-in and is not a CI/live compatibility guarantee until the guarded test is run with a real key.
 - `token-pilot-spring-ai-starter` does not exist in the current build; never use it as an install instruction until implemented and published.
 - Maven Central release consumption must be re-verified for both core and starter paths before announcing `0.1.0`.
 - Preflight cost bounds must use one immutable pricing snapshot from calculation through reservation and reconciliation; resolving a mutable registry again by model/policy identifiers can mix prices from different requests.
@@ -470,6 +477,11 @@ Stage and deploy a Central release:
 ```
 
 ## Update History
+
+### 2026-08-27
+
+- Added the sample app's application-owned OpenAI starter dependency, isolated `openai-smoke` profile, usage/accounting evidence endpoint, and key-gated live JUnit smoke test; default and demo profiles explicitly disable provider auto-configuration so deterministic tests remain unchanged.
+- Documented the sequential demo → OpenAI smoke procedure, environment-only API key handling, model/pricing requirements, and Prometheus evidence.
 
 ### 2026-08-26
 

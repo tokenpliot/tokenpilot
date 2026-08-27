@@ -5,21 +5,22 @@ import io.tokenpilot.core.domain.Cost;
 import java.util.Objects;
 
 /**
- * 부수 효과 없는 예산 평가 결과입니다.
+ * Side-effect-free budget evaluation result.
  *
- * @param key 평가 시점에 확정된 예산 bucket 식별자
- * @param evaluationType 후보 비용 포함 여부
- * @param state ALLOW / WARN / BLOCK / CURRENCY_MISMATCH 상태
- * @param threshold 예상 사용량이 도달한 예산 임계치
- * @param reason 상태 설명
- * @param committedUsage 현재 확정된 누적 사용량
- * @param projectedUsage 후보 비용을 포함한 예상 사용량. 상태 조회이거나 통화가 일치하지 않으면
- *                       {@code committedUsage}와 같습니다.
- * @param limit 통화를 포함한 총 예산
+ * @param key budget bucket identifier fixed at evaluation time
+ * @param evaluationType whether candidate cost is included
+ * @param state ALLOW / WARN / BLOCK / CURRENCY_MISMATCH state
+ * @param threshold budget threshold reached by projected usage
+ * @param reason state explanation
+ * @param committedUsage currently committed cumulative usage
+ * @param projectedUsage projected usage including candidate cost. It equals
+ *                       {@code committedUsage} for status queries or currency mismatches.
+ * @param limit total budget including its currency
  *
- * <p><strong>Migration note:</strong> {@link EvaluationType#STATUS} 결과는 현재 상태 조회용이며
- * provider 호출 허가의 근거가 아닙니다. 기존의 모호한 {@code currentUsage} 대신 확정
- * 사용량은 {@code committedUsage}, 후보 포함 사용량은 {@code projectedUsage}를 사용합니다.
+ * <p><strong>Migration note:</strong> {@link EvaluationType#STATUS} results are
+ * for current-state queries and are not grounds for authorizing provider calls.
+ * Use {@code committedUsage} for committed usage and {@code projectedUsage} for
+ * usage including a candidate instead of the former ambiguous {@code currentUsage}.
  */
 public record BudgetDecision(
     BudgetKey key,
@@ -57,7 +58,7 @@ public record BudgetDecision(
   }
 
   /**
-   * 후보 비용을 포함해 provider admission을 판단한 결과인지 반환합니다.
+   * Returns whether this result evaluates provider admission with candidate cost included.
    */
   public boolean isAdmissionDecision() {
     return evaluationType == EvaluationType.ADMISSION;
@@ -65,12 +66,12 @@ public record BudgetDecision(
 
   public enum EvaluationType {
     /**
-     * 후보 비용 없는 조회 전용 결과입니다. Provider 호출 허가로 사용할 수 없습니다.
+     * Query-only result without candidate cost. It cannot authorize provider invocation.
      */
     STATUS,
 
     /**
-     * 후보 비용을 포함한 admission 판단 결과입니다.
+     * Admission decision that includes candidate cost.
      */
     ADMISSION
   }

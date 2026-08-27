@@ -6,9 +6,9 @@ import java.time.ZoneId;
 import java.util.Objects;
 
 /**
- * 설정된 시간대 기준의 월별 예산 기간입니다.
+ * Monthly budget period in the configured time zone.
  *
- * @param value 예산이 적용되는 연월
+ * @param value year and month to which the budget applies
  */
 public record BudgetWindow(YearMonth value) {
 

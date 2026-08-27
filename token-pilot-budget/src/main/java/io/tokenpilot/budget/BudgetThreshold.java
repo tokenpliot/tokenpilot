@@ -1,18 +1,18 @@
 package io.tokenpilot.budget;
 
 /**
- *  예산 사용률에 따른 임계치 정의
+ *  Threshold definitions based on budget utilization.
  *
- * NONE     : 임계치 미도달
- * HALF     : 50% 도달
- * WARNING  : 80% 도달
- * EXCEEDED : 100% 초과
+ * NONE     : threshold not reached
+ * HALF     : 50% reached
+ * WARNING  : 80% reached
+ * EXCEEDED : 100% exceeded
  *
- *  notification 모듈에서 알림 판단 기준으로 사용됨
+ *  Used by the notification module as the alerting criterion.
  */
 public enum BudgetThreshold {
 
-  NONE,       // 아직 알림 필요 없음
+  NONE,       // No notification is needed yet.
   HALF,       // 50%
   WARNING,    // 80%
   EXCEEDED    // 100%

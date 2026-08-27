@@ -5,12 +5,13 @@ import java.util.Currency;
 import java.util.Objects;
 
 /**
- * 계산된 AI 호출 비용 정보.
+ * Calculated AI call cost.
  *
- * 내부 계산 정밀도를 그대로 보존하며 표시/청구를 위한 반올림은 외부 경계에서 적용합니다.
+ * Preserves internal calculation precision; rounding for display or billing is
+ * applied at an external boundary.
  *
- * @param value    0 이상의 비용
- * @param currency 비용 통화
+ * @param value    non-negative cost
+ * @param currency cost currency
  */
 public record Cost(
         BigDecimal value,

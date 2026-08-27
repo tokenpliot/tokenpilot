@@ -7,7 +7,7 @@ import io.tokenpilot.notification.BudgetNotificationLifecycleListener;
 
 import java.util.Objects;
 
-/** Budget notification lifecycle 이벤트를 Micrometer meter로 투영합니다. */
+/** Projects budget notification lifecycle events into Micrometer meters. */
 public final class NotificationMetricsPublisher
         implements BudgetNotificationLifecycleListener {
 

@@ -8,12 +8,12 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 특정 모델의 가격 정책 정보.
- * {@link TokenType} 별로 1,000(1K) 토큰당 가격을 관리합니다.
+ * Pricing policy information for a specific model.
+ * Maintains the price per 1,000 (1K) tokens for each {@link TokenType}.
  *
- * @param modelId  모델 식별자 (예: gpt-4o, claude-3-5-sonnet)
- * @param rates    1K 토큰 타입별 단가 (Map)
- * @param currency 통화 (기본값: USD)
+ * @param modelId  model identifier, such as gpt-4o or claude-3-5-sonnet
+ * @param rates    per-1K-token rate by token type
+ * @param currency currency, defaulting to USD
  */
 public record PricingPlan(
         String modelId,
@@ -48,21 +48,21 @@ public record PricingPlan(
     }
 
     /**
-     * 기본 입력/출력 단가와 통화를 사용하는 {@link PricingPlan}을 생성합니다.
+     * Creates a {@link PricingPlan} with basic input/output rates and a currency.
      */
     public PricingPlan(String modelId, BigDecimal promptPricePerK, BigDecimal completionPricePerK, Currency currency) {
         this(modelId, DEFAULT_PRICING_POLICY_ID, createRates(promptPricePerK, completionPricePerK), currency);
     }
 
     /**
-     * 기본 입력/출력 단가와 pricing policy id, 통화를 사용하는 {@link PricingPlan}을 생성합니다.
+     * Creates a {@link PricingPlan} with basic input/output rates, a pricing policy ID, and a currency.
      */
     public PricingPlan(String modelId, String pricingPolicyId, BigDecimal promptPricePerK, BigDecimal completionPricePerK, Currency currency) {
         this(modelId, pricingPolicyId, createRates(promptPricePerK, completionPricePerK), currency);
     }
 
     /**
-     * 기본 입력/출력 단가만 사용하는 {@link PricingPlan}을 생성합니다. 기본 통화는 USD입니다.
+     * Creates a {@link PricingPlan} with basic input/output rates and the default USD currency.
      */
     public PricingPlan(String modelId, BigDecimal promptPricePerK, BigDecimal completionPricePerK) {
         this(modelId, promptPricePerK, completionPricePerK, Currency.getInstance("USD"));
@@ -76,21 +76,22 @@ public record PricingPlan(
     }
 
     /**
-     * 기본 입력 단가를 반환합니다. (하위 호환성)
+     * Returns the basic input rate for compatibility.
      */
     public BigDecimal promptPricePerK() {
         return getRate(TokenType.PROMPT);
     }
 
     /**
-     * 기본 출력 단가를 반환합니다. (하위 호환성)
+     * Returns the basic output rate for compatibility.
      */
     public BigDecimal completionPricePerK() {
         return getRate(TokenType.COMPLETION);
     }
 
     /**
-     * 특정 토큰 타입의 단가를 가져옵니다. 없을 시 계층 구조에 따라 대체값을 반환합니다.
+     * Returns the rate for a token type, falling back through the rate hierarchy
+     * when a direct rate is absent.
      * REASONING -> COMPLETION
      * CACHE_READ_PROMPT, CACHE_CREATION_PROMPT -> PROMPT
      */
@@ -105,9 +106,10 @@ public record PricingPlan(
     }
 
     /**
-     * 특정 토큰 타입의 가격 결정 결과를 반환합니다.
-     * 명시적으로 등록된 0 rate는 {@link PricingResolution#RESOLVED}로,
-     * 누락된 rate는 {@link PricingResolution#MISSING_RATE}로 표현합니다.
+     * Returns the pricing resolution for a token type.
+     * An explicitly registered zero rate is represented as
+     * {@link PricingResolution#RESOLVED}; a missing rate is represented as
+     * {@link PricingResolution#MISSING_RATE}.
      */
     public PricingResolution resolveRate(TokenType type) {
         if (rates.containsKey(type)) {

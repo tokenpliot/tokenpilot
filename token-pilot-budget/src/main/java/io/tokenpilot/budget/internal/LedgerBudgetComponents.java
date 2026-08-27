@@ -17,7 +17,7 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
- * 예산 제어 컴포넌트 생성을 위한 팩토리 클래스입니다.
+ * Factory for creating budget-control components.
  */
 public final class LedgerBudgetComponents {
 
@@ -28,12 +28,12 @@ public final class LedgerBudgetComponents {
         return new InMemoryBudgetStateStore();
     }
 
-    /** 예약 admission과 accounting을 한 객체로 노출하는 기본 합성 store입니다. */
+    /** Default composite store exposing reservation admission and accounting as one object. */
     public static AtomicBudgetStateStore inMemoryAtomicBudgetStateStore() {
         return new InMemoryBudgetStateStore();
     }
 
-    /** 예약과 회계를 같은 원자적 상태에 연결하는 합성 store factory입니다. */
+    /** Composite store factory connecting reservation and accounting to the same atomic state. */
     public static AtomicBudgetStateStore inMemoryAtomicBudgetStateStore(
         Supplier<List<ReservationAccountingListener>> accountingListenerSupplier,
         Supplier<List<ReservationAccountingListenerErrorHandler>>
@@ -48,7 +48,7 @@ public final class LedgerBudgetComponents {
         );
     }
 
-    /** PR #68 accounting/notification listener 연결과 호환되는 convenience factory입니다. */
+    /** Convenience factory compatible with the PR #68 accounting/notification listener wiring. */
     public static BudgetStateStore inMemoryBudgetStateStore(
         List<ReservationAccountingListener> accountingListeners
     ) {
@@ -60,7 +60,7 @@ public final class LedgerBudgetComponents {
         );
     }
 
-    /** listener 실패 관측 hook까지 연결하는 convenience factory입니다. */
+    /** Convenience factory that also connects a listener-failure observation hook. */
     public static BudgetStateStore inMemoryBudgetStateStore(
         List<ReservationAccountingListener> accountingListeners,
         List<ReservationAccountingListenerErrorHandler> listenerErrorHandlers
@@ -74,7 +74,7 @@ public final class LedgerBudgetComponents {
         );
     }
 
-    /** Spring 등 DI container가 listener를 store 생성 뒤 지연 해석할 수 있는 factory입니다. */
+    /** Factory allowing a DI container such as Spring to resolve listeners after store creation. */
     public static BudgetStateStore inMemoryBudgetStateStore(
         Supplier<List<ReservationAccountingListener>> accountingListenerSupplier,
         Supplier<List<ReservationAccountingListenerErrorHandler>>
@@ -139,7 +139,7 @@ public final class LedgerBudgetComponents {
     }
 
     /**
-     * 예약을 생성한 store와 동일한 객체의 회계 명령 진입점을 반환합니다.
+     * Returns the accounting command entry point on the same object that created the reservation.
      */
     public static ReservationAccounting reservationAccounting(
         BudgetStateStore stateStore

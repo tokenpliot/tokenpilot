@@ -7,7 +7,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * framework-independent core component entrypoint입니다.
+ * Framework-independent core component entry point.
  */
 public final class CoreComponents {
 

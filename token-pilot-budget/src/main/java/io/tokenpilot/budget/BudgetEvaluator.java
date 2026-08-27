@@ -6,29 +6,30 @@ import java.util.Map;
 
 
 /**
- * 부수 효과 없이 예산 상태를 판단하는 인터페이스입니다.
+ * Interface for determining budget state without side effects.
  * <p>
- * 구현체는 판단 결과를 구조화된 {@link BudgetDecision}으로 반환하며 provider 호출을 직접
- * 차단하거나 알림/metric listener를 호출하지 않습니다. Provider 경계는 반환된 decision을
- * 별도로 집행해야 합니다.
+ * Implementations return a structured {@link BudgetDecision}; they do not block
+ * provider invocation or call notification/metric listeners directly. The
+ * provider boundary must enforce the returned decision separately.
  */
 public interface BudgetEvaluator {
 
   /**
-   * 현재 확정 사용량만 조회합니다.
+   * Reads only the currently committed usage.
    *
-   * @return {@link BudgetDecision.EvaluationType#STATUS}인 조회 전용 결과. 후보 비용이 없으므로
-   * provider 호출 허가의 근거로 사용할 수 없습니다.
+   * @return query-only {@link BudgetDecision.EvaluationType#STATUS} result. It
+   *         cannot authorize provider invocation because it has no candidate cost.
    */
   BudgetDecision evaluate(Map<String, String> tags);
 
   /**
-   * 후보 요청의 통화가 포함된 안전 상한 비용을 더해 admission 상태를 판단합니다.
+   * Determines admission state after adding the candidate request's
+   * currency-aware safe upper-bound cost.
    * <p>
-   * {@code projectedUsage >= limit}이면 BLOCK입니다. BLOCK과 CURRENCY_MISMATCH도 예외를
-   * 던지지 않고 decision으로 반환합니다.
+   * {@code projectedUsage >= limit} produces BLOCK. BLOCK and CURRENCY_MISMATCH
+   * are returned as decisions rather than thrown as exceptions.
    *
-   * @return {@link BudgetDecision.EvaluationType#ADMISSION}인 판단 결과
+   * @return {@link BudgetDecision.EvaluationType#ADMISSION} decision result
    */
   BudgetDecision evaluate(
       Map<String, String> tags,

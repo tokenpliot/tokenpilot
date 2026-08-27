@@ -2,7 +2,7 @@ package io.tokenpilot.budget;
 
 import java.util.Objects;
 
-/** 새롭게 적용된 예약 정산을 전달하는 회계 이벤트입니다. */
+/** Accounting event for a newly applied reservation settlement. */
 public record ReservationAccountingEvent(
         ReservationReconciliation reconciliation
 ) {

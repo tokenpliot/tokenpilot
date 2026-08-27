@@ -1,4 +1,6 @@
-# Token Pilot demo runbook
+# Token Pilot demo runbook (Korean)
+
+영문 버전은 [`DEMO_RUNBOOK_EN.md`](DEMO_RUNBOOK_EN.md)에서 확인할 수 있습니다.
 
 이 데모는 `demo` Spring profile에서만 활성화되는 네트워크 없는 가짜
 `ChatModel`을 사용합니다. 별도 자격 증명이나 외부 호출 없이도 context admission,
@@ -89,7 +91,55 @@ curl -s http://localhost:8080/actuator/prometheus \
 docker compose -f token-pilot-sample-app/docker-compose.yml down
 ```
 
-## 4. 상태 초기화
+## 4. OpenAI provider smoke 시나리오
+
+`demo` 앱을 먼저 종료한 뒤(`Ctrl+C`) 실제 OpenAI 호출을 수행합니다. 이 경로는
+외부 네트워크와 API key를 사용하며, 호출 비용은 OpenAI 계정에 청구됩니다. API key를
+소스 파일이나 커밋에 넣지 말고 환경 변수로만 전달합니다.
+
+기본 smoke 모델은 Token Pilot catalog에 등록된
+`gpt-4o-mini-2024-07-18`입니다. 다른 모델을 사용하려면 Token Pilot catalog와
+가격 설정도 함께 맞춰야 합니다.
+
+```bash
+export OPENAI_API_KEY='발급받은 OpenAI API key'
+export OPENAI_MODEL='gpt-4o-mini-2024-07-18'
+
+./gradlew --no-daemon :token-pilot-sample-app:bootRun \
+  --args='--spring.profiles.active=openai-smoke'
+```
+
+다른 터미널에서 한 번 호출합니다.
+
+```bash
+curl -sS --get http://localhost:8080/test/token-pilot/openai-smoke \
+  --data-urlencode 'prompt=Reply with one short sentence confirming the provider is reachable.' \
+  | jq
+```
+
+정상 결과는 `status=PASS`, `usageSource`가 `UNAVAILABLE`이 아닌 값, 그리고
+`accountingState=COMMITTED`입니다. 응답에는 provider 응답 토큰 수와 실제 정산 비용도
+함께 포함됩니다.
+
+```bash
+curl -sS http://localhost:8080/actuator/prometheus \
+  | rg '^tokenpilot_(preflight|budget|cost|reconciliation)'
+```
+
+자동화된 smoke test를 직접 실행할 때는 반드시 두 조건을 명시합니다. 일반적인
+`./gradlew test`에서는 실제 호출이 발생하지 않습니다.
+
+```bash
+RUN_OPENAI_SMOKE=true \
+  ./gradlew --no-daemon :token-pilot-sample-app:test \
+  --tests io.tokenpilot.sample.OpenAiSmokeE2ETest
+```
+
+demo와 smoke를 연속으로 확인하려면 `demo` 프로필에서 `/demo/run`을 실행하고 앱을
+종료한 다음, 위의 `openai-smoke` 프로필을 다시 시작해 smoke endpoint를 호출합니다.
+두 프로필은 같은 `8080` 포트를 사용하므로 동시에 실행하지 않습니다.
+
+## 5. 상태 초기화
 
 앱을 종료한 뒤 다시 `bootRun`하면 in-memory budget과 Micrometer counter가
 초기화됩니다.

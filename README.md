@@ -64,6 +64,8 @@ against the reservation-time pricing snapshot.
 - [Metrics reference](docs/METRICS.md) — Token Pilot-owned meters and legacy compatibility policy.
 - [Sample app runbook](docs/SAMPLE_RUNBOOK.md) — local app, Prometheus, Grafana, and troubleshooting commands.
 - [Deterministic demo runbook](token-pilot-sample-app/DEMO_RUNBOOK.md) — eight admission, reservation, idempotency, release, and reconciliation scenarios.
+- [English demo runbook](token-pilot-sample-app/DEMO_RUNBOOK_EN.md) — the same demo and OpenAI smoke procedure in English.
+- The same [sample app runbook](docs/SAMPLE_RUNBOOK.md) includes the opt-in OpenAI provider smoke path.
 - [Release procedure](docs/RELEASE.md) — staging, signing, external consumer, and Central Portal gates.
 - [30-day MVP cutline](docs/30_DAY_MVP_REPORT.md) and [post-MVP evolution plan](docs/EVOLUTION_PLAN.md).
 
@@ -91,6 +93,12 @@ docker compose -f token-pilot-sample-app/docker-compose.yml up --build -d
 See [QUICKSTART.md](docs/QUICKSTART.md) for the ten-minute path and
 [SAMPLE_RUNBOOK.md](docs/SAMPLE_RUNBOOK.md) for endpoint and troubleshooting
 details.
+
+The sample app's `openai-smoke` profile uses the application-selected OpenAI
+starter and exposes `/test/token-pilot/openai-smoke`. It requires
+`OPENAI_API_KEY`, makes a real provider call, and reports normalized usage plus
+the resulting Token Pilot accounting state. The guarded live test is skipped
+unless `RUN_OPENAI_SMOKE=true` is set.
 
 ## Micrometer metrics
 

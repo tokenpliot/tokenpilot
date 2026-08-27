@@ -15,7 +15,7 @@ import static io.tokenpilot.budget.ReservationState.RECONCILIATION_REQUIRED;
 import static io.tokenpilot.budget.ReservationState.WRITTEN_OFF;
 
 /**
- * 한 예약에 적용된 회계 명령을 판단하기 위한 내부 상태입니다.
+ * Internal state used to evaluate accounting commands applied to one reservation.
  */
 final class ReservationAccountingState {
 

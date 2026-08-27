@@ -1,16 +1,17 @@
 package io.tokenpilot.core.domain;
 
 /**
- * token 계산 결과와 모델 encoding의 호환성을 판단할 때 사용하는 계산 기준입니다.
+ * Basis used to determine compatibility between a token count result and a
+ * model encoding.
  *
- * @param id tokenization 기준을 식별하는 안정적인 값
+ * @param id stable value identifying the tokenization basis
  */
 public record TokenizationBasis(String id) {
 
     /**
-     * tokenization 기준 식별자가 null 또는 blank가 아닌지 검증합니다.
+     * Validates that the tokenization basis identifier is not null or blank.
      *
-     * @throws IllegalArgumentException id가 null이거나 blank인 경우
+     * @throws IllegalArgumentException when id is null or blank
      */
     public TokenizationBasis {
         if (id == null || id.isBlank()) {

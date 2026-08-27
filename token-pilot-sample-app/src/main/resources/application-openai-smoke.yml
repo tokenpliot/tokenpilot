@@ -1,0 +1,56 @@
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, health
+  metrics:
+    tags:
+      application: token-pilot-sample-app
+
+spring:
+  ai:
+    model:
+      chat: openai
+      embedding: none
+      image: none
+      audio:
+        transcription: none
+        speech: none
+      moderation: none
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      timeout: 30s
+      max-retries: 0
+      chat:
+        model: ${OPENAI_MODEL:gpt-4o-mini-2024-07-18}
+        temperature: 0.0
+
+token-pilot:
+  enabled: true
+  pricing:
+    plans:
+      - model-id: gpt-4o-mini-2024-07-18
+        currency: USD
+        rates:
+          PROMPT: ${OPENAI_PROMPT_PRICE_PER_1K:0.00015}
+          COMPLETION: ${OPENAI_COMPLETION_PRICE_PER_1K:0.00060}
+  spring-ai:
+    default-model-id: ${OPENAI_MODEL:gpt-4o-mini-2024-07-18}
+    default-reserved-output-tokens: 64
+    framing-headroom-tokens: 0
+  budget:
+    enabled: true
+    policy-id: openai-smoke-monthly
+    target-type: tenant
+    target-tag-key: tenant_id
+    fallback-target-id: openai-smoke
+    monthly-limit: ${OPENAI_SMOKE_MONTHLY_LIMIT:1.00}
+    currency: USD
+    zone-id: UTC
+  metrics:
+    enabled: true
+    legacy-ai-token-metrics-enabled: false
+    tag-whitelist: []

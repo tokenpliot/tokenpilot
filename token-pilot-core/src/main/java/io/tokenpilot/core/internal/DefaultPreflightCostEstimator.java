@@ -15,12 +15,14 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 불변 pricing snapshot의 배타적인 입력/출력 가격 경로에서 각각 최대 단가를 선택해
- * 같은 token을 중복 합산하지 않고 보수적인 비용 상한을 계산하는 기본 구현입니다.
+ * Default implementation that selects the maximum rate from the disjoint input
+ * and output pricing paths in an immutable pricing snapshot and calculates a
+ * conservative cost bound without double counting tokens.
  *
- * <p>이 구현은 비용만 계산하며 context admission이나 provider 호출을 허가하지 않습니다.
- * 입력 문맥이 보관한 동일한 snapshot만 사용하며, 계산 중 registry를 다시 조회하지
- * 않습니다. 호출 계층은 그 snapshot을 예약·정산에도 그대로 전달해야 합니다.</p>
+ * <p>This implementation calculates cost only; it does not authorize context
+ * admission or provider invocation. It uses only the snapshot retained by the
+ * input context and does not query a registry again during calculation. The
+ * calling layer must pass the same snapshot to reservation and settlement.</p>
  */
 class DefaultPreflightCostEstimator implements PreflightCostEstimator {
 

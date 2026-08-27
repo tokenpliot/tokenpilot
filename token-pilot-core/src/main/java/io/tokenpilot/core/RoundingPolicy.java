@@ -6,7 +6,8 @@ import java.math.RoundingMode;
 import java.util.Objects;
 
 /**
- * 내부 정밀도를 보존한 비용을 외부 표시/청구 경계에서 반올림하는 정책입니다.
+ * Policy for rounding costs that preserve internal precision at an external
+ * display or billing boundary.
  */
 public final class RoundingPolicy {
 

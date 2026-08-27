@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Spring AI 어댑터 컴포넌트 생성을 위한 팩토리 클래스입니다.
+ * Factory for creating Spring AI adapter components.
  */
 public final class LedgerSpringAiComponents {
 

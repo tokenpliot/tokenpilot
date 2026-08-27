@@ -21,14 +21,15 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * 원자적 budget/accounting 결과를 threshold 알림으로 변환하는 best-effort listener입니다.
+ * Best-effort listener that converts atomic budget/accounting results into threshold notifications.
  *
- * <p>원자적 callback의 threshold claim은 handler 호출 전에 완료됩니다. handler 실패는 다음
- * handler 전달을 막지 않고 이미 적용된 회계 또는 admission 결과를 변경하지 않으며, 실패한
- * 전달은 durable outbox가 없는 MVP에서 재시도되지 않습니다. Legacy decision 경로는 호환성을
- * 위해 전달 성공 후에만 상태를 갱신하므로 실패한 호출을 다음 호출에서 다시 시도합니다.
- * 두 경로의 claim은 같은 store monitor에서 직렬화되어 혼용 중에도 같은 threshold를 중복
- * 전달하지 않습니다.</p>
+ * <p>Threshold claims for atomic callbacks complete before handlers are called.
+ * A handler failure does not block the next handler or change an already applied
+ * accounting/admission result, and failed delivery is not retried in the MVP
+ * because there is no durable outbox. For compatibility, the legacy decision
+ * path updates state only after successful delivery, so a failed call is retried
+ * on the next call. Claims from both paths are serialized on the same store
+ * monitor and do not deliver the same threshold twice when mixed.</p>
  */
 public class BudgetNotificationService implements ReservationAccountingListener {
 
@@ -40,8 +41,9 @@ public class BudgetNotificationService implements ReservationAccountingListener 
   private final List<BudgetNotificationLifecycleListener> lifecycleListeners;
 
   /**
-   * @deprecated legacy {@link BudgetDecision} 알림 호환용 생성자입니다. 신규 연결은 복수
-   *             handler와 error hook을 받는 생성자를 사용하세요.
+   * @deprecated Compatibility constructor for legacy {@link BudgetDecision}
+   *             notifications. New wiring should use the constructor accepting
+   *             multiple handlers and an error hook.
    */
   @Deprecated(since = "0.1.0", forRemoval = false)
   public BudgetNotificationService(
@@ -51,7 +53,7 @@ public class BudgetNotificationService implements ReservationAccountingListener 
     this(handler, store, List.of());
   }
 
-  /** legacy decision 알림에 lifecycle 관측을 추가하는 호환 생성자입니다. */
+  /** Compatibility constructor that adds lifecycle observation to legacy decision notifications. */
   public BudgetNotificationService(
       BudgetNotificationHandler handler,
       NotificationStateStore store,
@@ -134,9 +136,10 @@ public class BudgetNotificationService implements ReservationAccountingListener 
   }
 
   /**
-   * 기존 #37 callback은 주입된 resolver로 현재 bucket snapshot을 조회합니다. 현재 budget store는
-   * 정확한 전이 시점 snapshot을 포함하는
-   * {@link #onAccountingApplied(ReservationAccountingEvent, BudgetSnapshot)}를 호출합니다.
+   * The former #37 callback reads the current bucket snapshot through the
+   * injected resolver. The current budget store calls
+   * {@link #onAccountingApplied(ReservationAccountingEvent, BudgetSnapshot)}
+   * with the snapshot from the exact transition point.
    */
   @Override
   public void onCommitted(ReservationAccountingEvent event) {
@@ -244,9 +247,10 @@ public class BudgetNotificationService implements ReservationAccountingListener 
   }
 
   /**
-   * @deprecated legacy evaluator 결과는 admission/accounting 알림 근거가 아닙니다. 신규 코드는
-   *             {@link ReservationAccountingListener} 연결을 사용하세요. tags는 legacy 이벤트에서만
-   *             불변 복사본으로 보존됩니다.
+   * @deprecated Legacy evaluator results are not grounds for admission/accounting
+   *             notifications. New code should wire a
+   *             {@link ReservationAccountingListener}. Tags are retained as an
+   *             immutable copy only for legacy events.
    */
   @Deprecated(since = "0.1.0", forRemoval = false)
   public void notifyIfNeeded(
@@ -351,7 +355,7 @@ public class BudgetNotificationService implements ReservationAccountingListener 
     try {
       errorHook.onError(error);
     } catch (RuntimeException ignored) {
-      // Error hook도 best-effort이며 accounting/provider 결과에 영향을 주지 않습니다.
+      // The error hook is also best-effort and does not affect accounting or provider results.
     }
   }
 

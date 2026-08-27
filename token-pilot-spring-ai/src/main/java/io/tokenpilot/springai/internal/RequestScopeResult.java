@@ -5,7 +5,7 @@ import io.tokenpilot.core.domain.TokenCountScope;
 import java.util.Objects;
 import java.util.Optional;
 
-/** 지원하는 request scope 또는 제한된 미지원 사유를 나타냅니다. */
+/** Represents a supported request scope or a bounded unsupported reason. */
 final class RequestScopeResult {
 
     private final Optional<TokenCountScope> scope;

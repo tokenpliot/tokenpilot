@@ -9,7 +9,7 @@ import org.springframework.ai.chat.prompt.ChatOptions;
 import java.util.Objects;
 import java.util.Optional;
 
-/** request model을 configured default 순서로 선택하고 Core registry에서 해석합니다. */
+/** Selects the request model before the configured default and resolves it in the Core registry. */
 final class ModelResolver {
 
     private final ModelRegistry modelRegistry;

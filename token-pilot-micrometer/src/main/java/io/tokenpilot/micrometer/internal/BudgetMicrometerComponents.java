@@ -2,7 +2,7 @@ package io.tokenpilot.micrometer.internal;
 
 import io.micrometer.core.instrument.MeterRegistry;
 
-/** Atomic budget owner의 선택 Micrometer publisher 팩토리입니다. */
+/** Factory for the optional Micrometer publisher owned by the atomic budget component. */
 public final class BudgetMicrometerComponents {
 
     private BudgetMicrometerComponents() {

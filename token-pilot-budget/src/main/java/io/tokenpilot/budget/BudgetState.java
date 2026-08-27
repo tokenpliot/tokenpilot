@@ -1,12 +1,12 @@
 package io.tokenpilot.budget;
 
 /**
- * 예산 평가 결과 상태를 나타냅니다.
+ * Represents the result state of a budget evaluation.
  * <p>
- * ALLOW : 호출 허용
- * WARN  : 예산 경고
- * BLOCK : 호출 차단
- * CURRENCY_MISMATCH : 예산과 비용 통화 불일치
+ * ALLOW : call allowed
+ * WARN  : budget warning
+ * BLOCK : call blocked
+ * CURRENCY_MISMATCH : budget and cost currencies differ
  */
 public enum BudgetState {
   ALLOW,

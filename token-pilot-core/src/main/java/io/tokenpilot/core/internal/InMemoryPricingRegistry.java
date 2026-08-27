@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
- * 메모리 기반 가격 정책 저장소 구현체.
+ * In-memory pricing policy repository implementation.
  */
 class InMemoryPricingRegistry implements PricingRegistry {
     private final Map<PricingPlanKey, PricingPlan> plans = new ConcurrentHashMap<>();

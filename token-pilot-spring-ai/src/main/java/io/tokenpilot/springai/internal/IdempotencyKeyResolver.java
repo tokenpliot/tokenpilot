@@ -6,7 +6,7 @@ import org.springframework.ai.chat.client.ChatClientRequest;
 import java.util.Objects;
 import java.util.function.Supplier;
 
-/** 현재 Advisor 호출에서 사용할 idempotency key를 결정합니다. */
+/** Determines the idempotency key for the current advisor call. */
 final class IdempotencyKeyResolver {
 
     private final RequestContextAccessor contextAccessor;

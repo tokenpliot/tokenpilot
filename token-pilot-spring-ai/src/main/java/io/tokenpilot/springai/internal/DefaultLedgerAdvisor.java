@@ -37,16 +37,16 @@ import java.util.Optional;
 import org.springframework.ai.chat.prompt.ChatOptions;
 
 /**
- * 기본 {@link LedgerAdvisor} 구현체.
- * {@link UsageExtractor}를 사용하여 토큰 사용량을 추출하고,
- * 그 결과를 {@link LedgerManager}에 기록하는 핵심 비즈니스 로직을 수행합니다.
- * 또한 {@link BudgetEvaluator}를 통해 예산 초과 여부를 사전에 차단하고,
- * 호출 성공 시 {@link BudgetStateStore}에 비용을 누적합니다.
+ * Default {@link LedgerAdvisor} implementation.
+ * Uses {@link UsageExtractor} to extract token usage and records the result in
+ * {@link LedgerManager} as its core business logic. It also blocks budget
+ * overages in advance through {@link BudgetEvaluator} and accumulates cost in
+ * {@link BudgetStateStore} when a call succeeds.
  * <p>
- * {@link #before(ChatClientRequest, AdvisorChain)}는 budget-disabled ledger-only
- * compatibility 경로의 상태 guard입니다. budget-enabled 호출은
- * {@link #adviseCall(ChatClientRequest, CallAdvisorChain)}에서 후보 비용을 포함한
- * preflight와 원자적 reservation lifecycle을 수행합니다.
+ * {@link #before(ChatClientRequest, AdvisorChain)} is the state guard for the
+ * budget-disabled ledger-only compatibility path. Budget-enabled calls perform
+ * preflight with candidate cost and the atomic reservation lifecycle in
+ * {@link #adviseCall(ChatClientRequest, CallAdvisorChain)}.
  */
 public class DefaultLedgerAdvisor implements LedgerAdvisor {
 

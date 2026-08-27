@@ -11,7 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 
-/** Atomic reservation/accounting metrics의 조건부 자동 설정입니다. */
+/** Conditional auto-configuration for atomic reservation/accounting metrics. */
 @AutoConfiguration(after = TokenPilotCoreMetricsAutoConfiguration.class)
 @ConditionalOnClass({
         MeterRegistry.class,

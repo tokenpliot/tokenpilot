@@ -8,7 +8,7 @@ import org.springframework.ai.chat.prompt.ChatOptions;
 import java.util.Objects;
 import java.util.OptionalLong;
 
-/** request maxTokens를 configured default 순서로 해석합니다. */
+/** Resolves request maxTokens before the configured default. */
 final class ReservedOutputResolver {
 
     private final @Nullable ReservedOutputTokensResolver providerResolver;

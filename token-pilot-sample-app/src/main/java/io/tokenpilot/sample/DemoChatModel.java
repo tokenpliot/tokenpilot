@@ -17,11 +17,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 녹화와 로컬 검증을 위한 네트워크 없는 Spring AI provider입니다.
+ * Network-free Spring AI provider for recording and local verification.
  *
- * <p>기본 프로필에는 등록되지 않으며 {@code demo} 프로필에서만 사용됩니다.
- * provider usage, 실패, usage 누락, 동시 dispatch 대기를 모두 결정적으로 재현할 수
- * 있어 API key 없이도 adapter와 accounting lifecycle을 확인할 수 있습니다.</p>
+ * <p>It is not registered in the default profile and is used only by the
+ * {@code demo} profile. Provider usage, failures, missing usage, and concurrent
+ * dispatch waiting can all be reproduced deterministically, allowing the
+ * adapter and accounting lifecycle to be verified without an API key.</p>
  */
 public final class DemoChatModel implements ChatModel {
 

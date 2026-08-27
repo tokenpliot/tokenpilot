@@ -12,38 +12,39 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * AI 모델별 가격 정책을 관리하는 저장소 인터페이스.
+ * Repository interface for managing pricing policies by AI model.
  */
 public interface PricingRegistry {
     /**
-     * 모델 식별자로 등록된 가격 정책을 조회합니다.
-     * @param modelId 모델 식별자
-     * @return 가격 정책 (존재하지 않을 경우 empty)
+     * Looks up a pricing policy registered for a model identifier.
+     * @param modelId model identifier
+     * @return pricing policy, or empty when none exists
      */
     Optional<PricingPlan> getPlan(String modelId);
 
     /**
-     * 모델 식별자와 pricing policy id로 등록된 가격 정책을 조회합니다.
-     * @param modelId 모델 식별자
-     * @param pricingPolicyId pricing policy 식별자
-     * @return 가격 정책 (존재하지 않을 경우 empty)
+     * Looks up a pricing policy registered for a model identifier and pricing policy ID.
+     * @param modelId model identifier
+     * @param pricingPolicyId pricing policy identifier
+     * @return pricing policy, or empty when none exists
      */
     Optional<PricingPlan> getPlan(String modelId, String pricingPolicyId);
 
     /**
-     * 모델 식별자와 pricing policy id로 요청 단위 pricing snapshot을 resolve합니다.
-     * @param modelId 모델 식별자
-     * @param pricingPolicyId pricing policy 식별자
-     * @return pricing snapshot (존재하지 않을 경우 empty)
+     * Resolves a request-scoped pricing snapshot by model identifier and pricing policy ID.
+     * @param modelId model identifier
+     * @param pricingPolicyId pricing policy identifier
+     * @return pricing snapshot, or empty when none exists
      */
     Optional<PricingSnapshot> resolveSnapshot(String modelId, String pricingPolicyId);
 
     /**
-     * canonical model definition과 연결된 catalog version으로 pricing snapshot을 resolve합니다.
-     * alias는 이 메서드에서 canonical id로 변환된 뒤에만 가격 조회에 사용됩니다.
+     * Resolves a pricing snapshot using the catalog version associated with a
+     * canonical model definition. An alias is used for pricing lookup only after
+     * it has been converted to a canonical ID.
      *
      * @param modelDefinition canonical model metadata
-     * @return model definition과 연결된 pricing snapshot
+     * @return pricing snapshot associated with the model definition
      */
     default Optional<PricingSnapshot> resolveSnapshot(ModelDefinition modelDefinition) {
         Objects.requireNonNull(modelDefinition, "modelDefinition must not be null");
@@ -59,11 +60,12 @@ public interface PricingRegistry {
     }
 
     /**
-     * canonical model registry를 거쳐 alias 가격 조회를 canonical 정책으로 고정합니다.
+     * Routes alias pricing lookup through the canonical model registry so the
+     * lookup is fixed to the canonical policy.
      *
      * @param modelRegistry canonical model lookup
-     * @param modelIdOrAlias canonical id 또는 exact alias
-     * @return canonical model definition과 일치하는 pricing snapshot
+     * @param modelIdOrAlias canonical ID or exact alias
+     * @return pricing snapshot matching the canonical model definition
      */
     default Optional<PricingSnapshot> resolveSnapshot(
             ModelRegistry modelRegistry,
@@ -75,25 +77,25 @@ public interface PricingRegistry {
     }
 
     /**
-     * 모델과 토큰 타입에 대한 가격 결정 결과를 조회합니다.
-     * @param modelId 모델 식별자
-     * @param tokenType 토큰 타입
-     * @return 가격 결정 결과
+     * Resolves pricing for a model and token type.
+     * @param modelId model identifier
+     * @param tokenType token type
+     * @return pricing resolution
      */
     PricingResolution resolveRate(String modelId, TokenType tokenType);
 
     /**
-     * 모델과 토큰 타입에 대한 가격 결정 결과를 기대 통화 기준으로 조회합니다.
-     * @param modelId 모델 식별자
-     * @param tokenType 토큰 타입
-     * @param expectedCurrency 기대 통화
-     * @return 가격 결정 결과
+     * Resolves pricing for a model and token type against an expected currency.
+     * @param modelId model identifier
+     * @param tokenType token type
+     * @param expectedCurrency expected currency
+     * @return pricing resolution
      */
     PricingResolution resolveRate(String modelId, TokenType tokenType, Currency expectedCurrency);
 
     /**
-     * 새로운 가격 정책을 등록하거나 업데이트합니다.
-     * @param plan 가격 정책
+     * Registers or updates a pricing policy.
+     * @param plan pricing policy
      */
     void registerPlan(PricingPlan plan);
 }

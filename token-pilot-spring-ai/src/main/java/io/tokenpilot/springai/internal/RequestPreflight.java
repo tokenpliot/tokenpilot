@@ -18,7 +18,7 @@ import org.springframework.ai.chat.client.ChatClientRequest;
 
 import java.util.Objects;
 
-/** Spring AI 요청 해석 결과를 기존 Core preflight 계약에 연결합니다. */
+/** Connects Spring AI request resolution results to the existing Core preflight contract. */
 final class RequestPreflight {
 
     private final DefaultRequestAdapter requestAdapter = new DefaultRequestAdapter();

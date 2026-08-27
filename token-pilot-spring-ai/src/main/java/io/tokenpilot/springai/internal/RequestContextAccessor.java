@@ -7,7 +7,7 @@ import org.springframework.ai.chat.client.ChatClientRequest;
 
 import java.util.Objects;
 
-/** Spring AI request context에서 Token Pilot correlation 값을 읽고 추가합니다. */
+/** Reads and adds Token Pilot correlation values in the Spring AI request context. */
 final class RequestContextAccessor {
 
     static final String REQUEST_ID_CONTEXT_KEY = "tokenpilot.request.id";

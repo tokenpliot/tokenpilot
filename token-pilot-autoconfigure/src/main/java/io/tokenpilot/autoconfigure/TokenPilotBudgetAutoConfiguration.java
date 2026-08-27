@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Bean;
 
 import java.time.Clock;
 
-/** Optional budget module의 bean graph를 격리하는 자동 설정입니다. */
+/** Auto-configuration isolating the optional budget module bean graph. */
 @AutoConfiguration(after = {
         TokenPilotAutoConfiguration.class,
         TokenPilotBudgetMetricsAutoConfiguration.class

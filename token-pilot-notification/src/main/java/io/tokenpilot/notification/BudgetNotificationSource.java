@@ -1,6 +1,6 @@
 package io.tokenpilot.notification;
 
-/** 알림을 만든 원자적 budget/accounting 결과의 종류입니다. */
+/** Type of atomic budget/accounting result that produced a notification. */
 public enum BudgetNotificationSource {
   ACCOUNTING_COMMIT,
   RECONCILIATION_REQUIRED,

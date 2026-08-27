@@ -13,7 +13,7 @@ import java.net.http.HttpResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** API key 없이 실행되는 제출용 demo profile의 HTTP 계약을 검증합니다. */
+/** Verifies the HTTP contract of the submission demo profile without an API key. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("demo")
 class DemoScenarioE2ETest {

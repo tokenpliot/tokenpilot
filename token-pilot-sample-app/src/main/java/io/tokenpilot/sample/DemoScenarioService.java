@@ -45,8 +45,9 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 반복 실행할 수 있는 framework-independent control/accounting 시나리오입니다.
- * 모든 provider 호출은 {@link DemoChatModel}로만 전달되며 외부 네트워크를 사용하지 않습니다.
+ * Repeatable framework-independent control/accounting scenarios.
+ * All provider calls are routed only to {@link DemoChatModel}, and no external
+ * network is used.
  */
 @Service
 @Profile("demo")
@@ -226,7 +227,7 @@ public class DemoScenarioService {
                     ));
                 }
 
-                // 경쟁 요청들은 첫 예약이 IN_FLIGHT인 동안 예약 단계에서 종료되어야 합니다.
+                // Competing requests must finish at the reservation stage while the first reservation is IN_FLIGHT.
                 for (Future<CallOutcome> competitor : competitors) {
                     competitorOutcomes.add(await(competitor));
                 }

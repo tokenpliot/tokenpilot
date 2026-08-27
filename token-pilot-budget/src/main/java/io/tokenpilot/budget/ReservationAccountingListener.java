@@ -1,12 +1,14 @@
 package io.tokenpilot.budget;
 
 /**
- * 예약 admission과 정산 결과를 수신하는 framework-independent 계약입니다.
+ * Framework-independent contract for receiving reservation admission and
+ * settlement results.
  *
- * <p>기존 lambda listener와의 source 호환성을 위해 {@link #onCommitted}만 추상
- * 메서드로 유지합니다. 나머지 callback은 예약 저장소가 확정한 결과를 관찰하기 위한
- * 선택적 확장점입니다. 회계 변경 callback은 새로 적용된 전이에만 전달되고, 예약
- * callback은 모든 평가 결과와 BLOCK 결과를 각각 관찰할 수 있습니다.</p>
+ * <p>Only {@link #onCommitted} remains abstract for source compatibility with
+ * existing lambda listeners. The other callbacks are optional extension points
+ * for observing results confirmed by the reservation store. Accounting-change
+ * callbacks are delivered only for newly applied transitions; reservation
+ * callbacks can observe every evaluation and BLOCK result separately.</p>
  */
 @FunctionalInterface
 public interface ReservationAccountingListener {
@@ -14,8 +16,9 @@ public interface ReservationAccountingListener {
     void onCommitted(ReservationAccountingEvent event);
 
     /**
-     * 적용된 accounting transition과 같은 linearization point의 bucket snapshot을 전달합니다.
-     * 기존 listener는 {@link #onCommitted(ReservationAccountingEvent)}로 위임됩니다.
+     * Delivers the bucket snapshot at the same linearization point as the applied
+     * accounting transition. Existing listeners delegate to
+     * {@link #onCommitted(ReservationAccountingEvent)}.
      */
     default void onAccountingApplied(
             ReservationAccountingEvent event,
@@ -24,26 +27,26 @@ public interface ReservationAccountingListener {
         onCommitted(event);
     }
 
-    /** actual 미확정 estimate가 pending liability로 이동한 결과를 전달합니다. */
+    /** Delivers a result where an estimate with unconfirmed actual usage moved to pending liability. */
     default void onReconciliationRequired(
             ReservationReconciliationRequiredEvent event
     ) {
     }
 
-    /** 원자적 예약 시도의 모든 결과를 전달합니다. */
+    /** Delivers every result of an atomic reservation attempt. */
     default void onReservationEvaluated(
             BudgetReservationRequest request,
             BudgetReservationResult result
     ) {
     }
-    /** 원자적 admission에서 상태 변경 없이 차단된 결과를 전달합니다. */
+    /** Delivers a result blocked during atomic admission without changing state. */
     default void onReservationBlocked(
             BudgetReservationRequest request,
             BudgetReservationResult result
     ) {
     }
 
-    /** metric tag에 안전한 제한된 listener 종류를 반환합니다. */
+    /** Returns a bounded listener type safe to use as a metric tag. */
     default ReservationAccountingListenerType listenerType() {
         return ReservationAccountingListenerType.CUSTOM;
     }

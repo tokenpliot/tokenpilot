@@ -22,12 +22,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 메모리 기반 accounting threshold dedup 저장소입니다.
+ * In-memory accounting threshold deduplication store.
  *
- * <p>dedup key는 {@code BudgetKey(policy/target/window) + BudgetThreshold}입니다.
- * 처리한 accounting transition은 같은 bucket의 {@link ReservationId}로 중복 claim을 막습니다.
- * 상태는 이 store 인스턴스의 생명주기 동안 보존되며 재시작 후 replay나 TTL 정리는 제공하지
- * 않습니다. 따라서 MVP 전달 보장은 process-local best-effort이며 durable exactly-once가 아닙니다.</p>
+ * <p>The deduplication key is {@code BudgetKey(policy/target/window) + BudgetThreshold}.
+ * Processed accounting transitions are protected from duplicate claims by
+ * {@link ReservationId} within the same bucket. State is retained for the
+ * lifetime of this store instance; restart replay and TTL cleanup are not
+ * provided. Therefore MVP delivery is process-local best-effort, not durable
+ * exactly-once.</p>
  */
 @SuppressWarnings("deprecation")
 public class InMemoryNotificationStateStore

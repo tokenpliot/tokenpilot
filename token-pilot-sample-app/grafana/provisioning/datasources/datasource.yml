@@ -4,6 +4,6 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
-    url: ${PROMETHEUS_URL}  # 고정된 주소 대신, 환경 변수로 구멍을 뚫어둡니다! 로컬과 aws 둘 다 사용하기 위함
+    url: ${PROMETHEUS_URL}  # Use an environment variable instead of a fixed address for local and AWS use.
     isDefault: true
     uid: prometheus-uid

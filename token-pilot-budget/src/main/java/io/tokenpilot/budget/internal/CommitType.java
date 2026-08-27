@@ -1,6 +1,6 @@
 package io.tokenpilot.budget.internal;
 
-/** Actual 비용이 확정된 경로입니다. */
+/** Path on which actual cost was committed. */
 enum CommitType {
     DIRECT,
     LATE_ACTUAL

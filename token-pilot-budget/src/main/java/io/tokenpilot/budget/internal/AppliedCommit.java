@@ -12,7 +12,8 @@ import static io.tokenpilot.budget.AccountingTransitionStatus.CONFLICT;
 import static io.tokenpilot.budget.AccountingTransitionStatus.REUSED;
 
 /**
- * 이미 적용된 commit의 종류, actual과 재호출 판단을 보관합니다.
+ * Stores the type of an applied commit and the values used to evaluate actual
+ * usage and repeated calls.
  */
 record AppliedCommit(
         CommitType type,

@@ -3,35 +3,39 @@ package io.tokenpilot.budget;
 import io.tokenpilot.core.domain.Cost;
 
 /**
- * resolved {@link BudgetKey}별 누적 비용과 limit/currency snapshot을 관리합니다.
+ * Manages accumulated cost and limit/currency snapshots for each resolved
+ * {@link BudgetKey}.
  */
 public interface BudgetStateStore {
 
   /**
-   * 기존 확정 비용 조회 API입니다. 예약 금액은 포함하지 않습니다.
+   * Legacy API for reading committed cost. Reserved amounts are not included.
    *
-   * <p>새 provider admission 경계는 {@link #snapshot(BudgetKey, Cost)} 또는
-   * {@link #checkAndReserve(BudgetReservationRequest)}를 사용해야 합니다.</p>
+   * <p>New provider admission boundaries must use
+   * {@link #snapshot(BudgetKey, Cost)} or
+   * {@link #checkAndReserve(BudgetReservationRequest)}.</p>
    */
   Cost getAccumulatedCost(BudgetKey key, Cost limit);
 
   /**
-   * 기존 확정 비용 누적 API입니다. 예약 lifecycle을 변경하지 않습니다.
+   * Legacy API for adding committed cost. It does not change the reservation lifecycle.
    */
   void addCost(BudgetKey key, Cost limit, Cost amount);
 
   /**
-   * 조회와 안전 상한 예약을 하나의 원자적 연산으로 수행합니다.
+   * Performs the read and safe upper-bound reservation as one atomic operation.
    *
-   * <p>기존 구현체와의 source 호환성을 위해 기본 구현은 지원하지 않음을 명시적으로
-   * 반환합니다. 예약을 지원하는 구현체는 이 메서드 또는 요청 overload를 구현해야 합니다.</p>
+   * <p>For source compatibility with existing implementations, the default
+   * implementation explicitly returns that the operation is unsupported.
+   * Implementations that support reservations must implement this method or the
+   * request overload.</p>
    *
-   * @param key 예산 bucket 식별자
-   * @param limit bucket에 고정할 예산 limit snapshot
-   * @param safeUpperBoundCost 예약할 보수적 비용 상한
-   * @param idempotencyKey 중복 요청 식별자
-   * @return 생성·재사용·차단·충돌·통화 불일치 결과
-   * @deprecated request ID와 idempotency key를 분리하는 overload 또는 요청 객체를 사용하세요.
+   * @param key budget bucket identifier
+   * @param limit budget limit snapshot fixed for the bucket
+   * @param safeUpperBoundCost conservative cost bound to reserve
+   * @param idempotencyKey duplicate-request identifier
+   * @return created, reused, blocked, conflict, or currency-mismatch result
+   * @deprecated Use an overload or request object that separates request ID and idempotency key.
    */
   @Deprecated(since = "0.1.0", forRemoval = false)
   default BudgetReservationResult checkAndReserve(
@@ -49,9 +53,9 @@ public interface BudgetStateStore {
   }
 
   /**
-   * typed idempotency key를 사용하는 원자적 예약 overload입니다.
+   * Atomic reservation overload using a typed idempotency key.
    *
-   * @deprecated request ID와 idempotency key를 분리하는 overload 또는 요청 객체를 사용하세요.
+   * @deprecated Use an overload or request object that separates request ID and idempotency key.
    */
   @Deprecated(since = "0.1.0", forRemoval = false)
   default BudgetReservationResult checkAndReserve(
@@ -72,7 +76,8 @@ public interface BudgetStateStore {
   }
 
   /**
-   * 요청 상관관계와 중복 방지 식별자를 분리하는 원자적 예약 overload입니다.
+   * Atomic reservation overload separating request correlation from the
+   * duplicate-prevention identifier.
    */
   default BudgetReservationResult checkAndReserve(
       BudgetKey key,
@@ -95,7 +100,7 @@ public interface BudgetStateStore {
   }
 
   /**
-   * 모델·가격 snapshot metadata를 포함한 원자적 예약 요청입니다.
+   * Atomic reservation request including model and pricing snapshot metadata.
    */
   default BudgetReservationResult checkAndReserve(BudgetReservationRequest request) {
     throw new UnsupportedOperationException(
@@ -104,8 +109,8 @@ public interface BudgetStateStore {
   }
 
   /**
-   * 예약과 미해결 정산 부채를 포함한 읽기 snapshot입니다.
-   * 기존 저장소는 확정 비용만 포함한 호환 snapshot을 반환할 수 있습니다.
+   * Read snapshot including reservations and unresolved reconciliation liability.
+   * Legacy stores may return a compatible snapshot containing committed cost only.
    */
   default BudgetSnapshot snapshot(BudgetKey key, Cost limit) {
     Cost committedCost = getAccumulatedCost(key, limit);
@@ -120,7 +125,7 @@ public interface BudgetStateStore {
   }
 
   /**
-   * {@link #snapshot(BudgetKey, Cost)}의 명시적인 query alias입니다.
+   * Explicit query alias for {@link #snapshot(BudgetKey, Cost)}.
    */
   default BudgetSnapshot getSnapshot(BudgetKey key, Cost limit) {
     return snapshot(key, limit);

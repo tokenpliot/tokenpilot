@@ -3,7 +3,7 @@ package io.tokenpilot.budget;
 import java.util.Objects;
 
 /**
- * 원자적 예산 예약 시도의 결과입니다.
+ * Result of an atomic budget reservation attempt.
  */
 public record BudgetReservationResult(
         ReservationStatus status,

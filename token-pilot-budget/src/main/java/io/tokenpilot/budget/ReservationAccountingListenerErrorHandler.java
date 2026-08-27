@@ -1,6 +1,6 @@
 package io.tokenpilot.budget;
 
-/** bounded 회계 listener 실패를 관찰하는 best-effort hook입니다. */
+/** Best-effort hook for observing bounded accounting listener failures. */
 @FunctionalInterface
 public interface ReservationAccountingListenerErrorHandler {
 

@@ -7,7 +7,7 @@ import io.tokenpilot.core.domain.UsageSource;
 import java.util.Map;
 import java.util.Objects;
 
-/** Provider actual usage에서 무제한 metadata를 제외한 회계용 token 결과입니다. */
+/** Accounting token result derived from provider actual usage without unbounded metadata. */
 public record ReservationActualTokens(
         long inputTokens,
         long outputTokens,

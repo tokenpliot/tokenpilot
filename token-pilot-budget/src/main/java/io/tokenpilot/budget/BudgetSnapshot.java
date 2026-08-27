@@ -7,7 +7,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 예산 bucket의 framework-independent 읽기 snapshot입니다.
+ * Framework-independent read snapshot of a budget bucket.
  */
 public record BudgetSnapshot(
         BudgetKey key,
@@ -45,7 +45,7 @@ public record BudgetSnapshot(
     }
 
     /**
-     * 예약과 미해결 정산 부채를 포함한 admission 기준 사용량입니다.
+     * Usage used for admission, including reservations and unresolved reconciliation liability.
      */
     public Cost effectiveUsage() {
         return committedCost
@@ -54,7 +54,7 @@ public record BudgetSnapshot(
     }
 
     /**
-     * 사용량을 반영한 남은 예산입니다. 초과 상태에서는 0입니다.
+     * Remaining budget after usage. Returns zero when the budget is exceeded.
      */
     public Cost remaining() {
         Cost effectiveUsage = effectiveUsage();
