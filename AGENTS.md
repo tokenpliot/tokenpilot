@@ -293,6 +293,19 @@ Current endpoints:
 - `GET /test/token-pilot/budget`: exercises budget enabled/limit behavior when budget beans are present.
 - `GET /actuator/prometheus`: validates actuator/prometheus exposure.
 
+Demo profile endpoints (run with `--spring.profiles.active=demo`):
+
+- `GET /test/token-pilot/demo`: describes the no-key, in-memory provider and scenario links.
+- `GET /test/token-pilot/demo/run`: runs context fit/block, atomic reservation concurrency,
+  idempotency, release, and success/failure/unknown reconciliation scenarios.
+- `GET /test/token-pilot/demo/{context-fit|context-block|budget-concurrency|idempotency|release|reconciliation-success|reconciliation-failure|reconciliation-unknown}`:
+  runs one deterministic scenario.
+
+The demo profile uses `DemoChatModel` only; it makes no external provider calls. The
+sample app's `DEMO_RUNBOOK.md` documents the Gradle, Prometheus/Grafana, and scenario
+verification flow. The provisioned dashboard uses Token Pilot-owned `tokenpilot_*`
+meters and deliberately does not use legacy `ai_token_*` meters.
+
 Test-only E2E endpoint:
 
 - `GET /test/token-pilot/chat`: exercises the Spring AI `ChatClient` advisor path with a fake/mock provider or documented real provider setup.
@@ -463,6 +476,10 @@ Stage and deploy a Central release:
 - Added root publication aggregation and a release-candidate verification gate
   that stages every public module and checks the complete artifact/signature
   set for the selected version.
+- Added a `demo` Spring profile to the sample app with a deterministic in-memory
+  ChatModel, public admission/reservation/idempotency/reconciliation scenarios,
+  integration coverage, a Token Pilot Prometheus/Grafana dashboard, and a
+  deterministic verification runbook.
 - Added isolated external Core/Starter consumer verification with fresh cache,
   dependency evidence, negative artifact/version scenarios, and a protected
   0.1.0 release-candidate workflow.

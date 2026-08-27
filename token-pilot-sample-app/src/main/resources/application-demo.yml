@@ -1,0 +1,38 @@
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, health
+  metrics:
+    tags:
+      application: token-pilot-sample-app
+
+token-pilot:
+  enabled: true
+  pricing:
+    plans:
+      - model-id: gpt-4o-2024-08-06
+        currency: USD
+        rates:
+          PROMPT: 0.00015
+          COMPLETION: 0.00060
+  spring-ai:
+    default-model-id: gpt-4o-2024-08-06
+    default-reserved-output-tokens: 16
+    framing-headroom-tokens: 0
+  budget:
+    enabled: true
+    policy-id: demo-monthly
+    target-type: tenant
+    target-tag-key: tenant_id
+    fallback-target-id: demo-shared
+    monthly-limit: 0.001
+    currency: USD
+    zone-id: UTC
+  metrics:
+    enabled: true
+    legacy-ai-token-metrics-enabled: false
+    tag-whitelist: []

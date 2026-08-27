@@ -10,12 +10,13 @@ services:
   grafana:
     build: ./grafana
     container_name: grafana
+    depends_on:
+      - prometheus
     ports:
       - "3000:3000"
     environment:
       - PROMETHEUS_URL=http://prometheus:9090
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
-      # 👇 여기 아래 두 줄을 집중해서 수정/추가해 주세요!
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer  # 기존 Admin에서 Viewer로 변경 (면접관용)
-      - GF_AUTH_DISABLE_LOGIN_FORM=false   # 로그인 창을 살려둠 (내 작업용 숨겨진 통로)
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_DISABLE_LOGIN_FORM=true    # 별도 로그인 없이 대시보드 조회
