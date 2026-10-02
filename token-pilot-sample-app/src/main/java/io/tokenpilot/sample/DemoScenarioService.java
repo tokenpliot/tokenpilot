@@ -72,6 +72,7 @@ public class DemoScenarioService {
     private final TokenPilotProperties properties;
     private final MeterRegistry meterRegistry;
     private final AtomicInteger runSequence = new AtomicInteger();
+    private final ObserveLedgerListener observeLedgerListener;
 
     @Autowired
     public DemoScenarioService(
@@ -83,7 +84,8 @@ public class DemoScenarioService {
             TokenEstimator tokenEstimator,
             TokenBudget tokenBudget,
             TokenPilotProperties properties,
-            MeterRegistry meterRegistry
+            MeterRegistry meterRegistry,
+            ObserveLedgerListener observeLedgerListener
     ) {
         this.chatClientBuilder = chatClientBuilder;
         this.demoChatModel = demoChatModel;
@@ -94,6 +96,7 @@ public class DemoScenarioService {
         this.tokenBudget = tokenBudget;
         this.properties = properties;
         this.meterRegistry = meterRegistry;
+        this.observeLedgerListener = observeLedgerListener;
     }
 
     public synchronized DemoRunReport runAll() {
@@ -431,7 +434,14 @@ public class DemoScenarioService {
         boolean pending = snapshot.pendingReconciliationLiability().value().signum() > 0;
         boolean committed = snapshot.committedCost().value().signum() > 0;
         boolean passed = switch (mode) {
-            case SUCCESS -> outcome.state().equals("COMMITTED") && committed && !pending;
+            case SUCCESS -> {
+                boolean p = outcome.state().equals("COMMITTED") && committed && !pending;
+                if (p) {
+                    // 🎯 [핵심] 데모 정산이 성공했을 때 8081 백엔드 API로 비동기 로그 전송!
+                    observeLedgerListener.sendUsageLogManually(MODEL_ID, 1200, 800, 0.0035);
+                }
+                yield p;
+            }
             case PROVIDER_FAILURE -> outcome.state().equals("PROVIDER_FAILED") && pending && !committed;
             case USAGE_UNKNOWN -> outcome.state().equals("COMMITTED") && pending && !committed;
         };
@@ -665,4 +675,5 @@ public class DemoScenarioService {
             this.summary = summary;
         }
     }
+
 }

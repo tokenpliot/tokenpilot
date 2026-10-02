@@ -143,3 +143,35 @@ demo와 smoke를 연속으로 확인하려면 `demo` 프로필에서 `/demo/run`
 
 앱을 종료한 뒤 다시 `bootRun`하면 in-memory budget과 Micrometer counter가
 초기화됩니다.
+
+
+## 6. Observe Cloud API E2E 연동 및 장애 주입(Fault Injection) 검증
+
+이 섹션은 샘플 앱과 중앙 수집 백엔드(token-ledger-cloud-api) 간의 비동기 사용량 수집 파이프라인과 비차단(Non-blocking) 장애 격리 기능을 검증하기 위한 가이드입니다.
+
+## 6.1. 사전 준비 (백엔드 수집 서버 실행)
+
+중앙 수집 API 서버를 별도 터미널에서 8081 포트로 실행합니다.
+
+cd token-ledger-cloud-api
+./gradlew bootRun
+
+## 6.2. E2E 연동 및 정상 수집 검증
+
+1. 샘플 앱을 demo 프로필로 실행합니다 (8080 포트).
+2. 브라우저나 curl로 데모를 실행합니다.
+   curl -s http://localhost:8080/test/token-pilot/demo/run | jq
+3. 확인 사항:
+    - 샘플 앱 터미널에 [Observe 전송 성공] Status: 201 로그가 출력되는지 확인합니다.
+    - 백엔드(8081) 터미널에 usage_events 테이블로 데이터가 정상 INSERT 되는지 확인합니다.
+
+## 6.3. 장애 주입 테스트 (Non-Blocking 검증)
+
+수집 서버가 다운되거나 응답하지 않아도 샘플 앱의 메인 로직이 차단되지 않는지 검증합니다.
+
+1. 8081 포트에서 실행 중인 백엔드 서버를 강제로 종료합니다 (Ctrl + C).
+2. 샘플 앱에서 다시 데모 시나리오를 호출합니다.
+   curl -s http://localhost:8080/test/token-pilot/demo/run | jq
+3. 확인 사항:
+    - 수집 서버가 꺼져 있어도 웹 요청과 시나리오 결과는 에러 없이 정상 반환됩니다.
+    - 샘플 앱 터미널에 [Observe 통신 실패...] java.net.ConnectException 예외 로그가 찍히지만, 애플리케이션은 중단되지 않고 정상 유지됩니다.

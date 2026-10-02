@@ -148,3 +148,35 @@ the same time.
 ## 5. Reset the demo state
 
 Restarting `bootRun` resets the in-memory budget store and Micrometer counters.
+
+
+## 6. Observe Cloud API E2E Integration & Fault Injection Verification
+
+This section covers verifying the asynchronous usage collection pipeline between the sample app and the central collection backend (token-ledger-cloud-api), including non-blocking fault isolation.
+
+## 6.1. Prerequisites (Start Backend Collection Server)
+
+Run the central collection API server in a separate terminal on port 8081:
+
+cd token-ledger-cloud-api
+./gradlew bootRun
+
+## 6.2. E2E Integration & Successful Collection Verification
+
+1. Start the sample app with the demo profile (port 8080).
+2. Run the demo via browser or curl:
+   curl -s http://localhost:8080/test/token-pilot/demo/run | jq
+3. Verification:
+    - Confirm that the sample app terminal logs "[Observe 전송 성공] Status: 201".
+    - Confirm that data is successfully inserted into the usage_events table in the backend (8081) terminal.
+
+## 6.3. Fault Injection Test (Non-Blocking Verification)
+
+Verify that the sample app's main logic is not blocked even if the collection server is down or unresponsive.
+
+1. Forcefully stop the backend server running on port 8081 (Ctrl + C).
+2. Call the demo scenarios from the sample app again:
+   curl -s http://localhost:8080/test/token-pilot/demo/run | jq
+3. Verification:
+    - Web requests and scenario results return normally without errors even when the collection server is down.
+    - The sample app terminal prints connection failure exceptions (e.g., java.net.ConnectException), but the application continues to run without interruption.
